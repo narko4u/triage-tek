@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screening Evidence Layer</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#16213a; --line:#22304d;
+    --ink:#e8eefc; --muted:#94a3bb; --accent:#4f9cf9; --ok:#39d98a;
+    --warn:#f5b942; --bad:#ff6b6b; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#101a2d,#0b1220)}
+  h1{font-size:16px;margin:0;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  .pill{font:12px var(--mono);padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.ok{color:var(--ok);border-color:#1d5a3d;background:#0f2a1e}
+  .pill.bad{color:var(--bad);border-color:#5a1d1d;background:#2a0f0f}
+  main{display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,1.2fr);gap:14px;padding:14px 22px 28px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel h2{margin:0;padding:10px 14px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel2)}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:7px 12px;border-bottom:1px solid #1b2740;font-size:13px}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#182440}
+  tbody tr.sel{background:#1b2b4c;outline:1px solid #2c4470 inset}
+  .tier{font:11px var(--mono);padding:2px 7px;border-radius:4px}
+  .tier.HIGH{background:#3a1414;color:#ff9d9d}
+  .tier.MODERATE{background:#3a2c10;color:#ffd08a}
+  .tier.LOW{background:#14301f;color:#8fe6b5}
+  .mono{font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all}
+  .body{padding:14px}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin-bottom:12px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);margin-right:6px}
+  .badge.yes{color:var(--ok);border-color:#1d5a3d}
+  .badge.no{color:var(--bad);border-color:#5a1d1d}
+  button{font:600 12px/1 inherit;padding:9px 14px;border-radius:7px;border:1px solid #2b3f63;background:#1a2a47;color:var(--ink);cursor:pointer}
+  button:hover{background:#22345a}
+  button.primary{background:#2059a8;border-color:#2f6fc7}
+  button.primary:hover{background:#2a6bc4}
+  button.ghost{background:transparent}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .tabs{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .tabs button{background:transparent;border:1px solid transparent;color:var(--muted);font-weight:500}
+  .tabs button.on{color:var(--ink);border-color:var(--line);background:#1b2b4c}
+  pre{margin:0;padding:12px;background:#0c1424;border-top:1px solid var(--line);font:12px/1.5 var(--mono);
+      white-space:pre-wrap;max-height:340px;overflow:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .small{font-size:12px;color:var(--muted)}
+  .flash{font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Screening Evidence Layer</h1>
+    <div class="sub">Consent-bound screening triage with a sealed, tamper-evident record of every decision</div>
+  </div>
+  <div class="spacer"></div>
+  <div id="chainPill" class="pill">checking chain…</div>
+  <div id="headPill" class="pill mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">head —</div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Approval queue <span id="queueCount" class="small"></span></h2>
+    <div style="max-height:560px;overflow:auto">
+      <table>
+        <thead><tr><th>Person</th><th>Tier</th><th>Score</th><th>Channel</th><th>Status</th></tr></thead>
+        <tbody id="queue"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Decision detail</h2>
+    <div id="detail" class="body"><span class="small">Select a person from the queue.</span></div>
+  </section>
+
+  <section class="panel" style="grid-column:1/-1">
+    <div class="tabs">
+      <button data-tab="verify" class="on">Verifier</button>
+      <button data-tab="equity">Equity</button>
+      <button data-tab="about">What this proves</button>
+    </div>
+    <div id="tab-verify" class="body">
+      <div class="row">
+        <button class="primary" onclick="verifyChain()">Verify chain</button>
+        <button onclick="tamperDemo()">Tamper with one record, then verify</button>
+        <button class="ghost" onclick="downloadCohort()">Export cohort audit (CSV)</button>
+      </div>
+      <div id="verifyFlash" class="flash small"></div>
+      <pre id="verifyOut">Not run yet.</pre>
+    </div>
+    <div id="tab-equity" class="body" style="display:none">
+      <div class="row" style="margin-top:0"><button onclick="loadEquity()">Refresh equity report</button></div>
+      <div id="equityOut" class="grid2" style="margin-top:12px"></div>
+    </div>
+    <div id="tab-about" class="body" style="display:none">
+      <p><strong>The claim:</strong> a screening programme can prove, after the fact, what data was used for each
+      decision, which model version produced a flag, whether the person consented, and who approved the contact.</p>
+      <p><strong>What is real here:</strong> the cohort is synthetic and seeded, the risk model is a published points
+      system, and every transition you make is sealed into a hash chain you can verify yourself in this tab.</p>
+      <p><strong>What this is not:</strong> a diagnostic device, a calibrated clinical model, or a claim about health
+      outcomes. It is the accountability layer around the model, which is the part that gets audited.</p>
+      <p class="small">Model SEL-RISK 1.0.0 · thresholds 6 high / 4 moderate · records are append-only, deleting or
+      editing a line breaks verification at that index.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+let current = null;
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  return {status:r.status, body: await r.json()};
+}
+
+async function loadSummary(){
+  const {body} = await api('/api/summary');
+  const pill = document.getElementById('chainPill');
+  pill.textContent = body.chain_ok ? `chain OK · ${body.records} records` : `CHAIN BROKEN at ${body.first_bad_seq}`;
+  pill.className = 'pill ' + (body.chain_ok ? 'ok' : 'bad');
+  document.getElementById('headPill').textContent = 'head ' + body.head.slice(0,24) + '…';
+}
+
+async function loadQueue(){
+  const {body} = await api('/api/queue?limit=150');
+  const tb = document.getElementById('queue');
+  tb.innerHTML = '';
+  document.getElementById('queueCount').textContent = `· ${body.queue.length} shown`;
+  for (const row of body.queue){
+    const tr = document.createElement('tr');
+    tr.className = row.person_id === current ? 'sel' : '';
+    tr.onclick = () => showPerson(row.person_id);
+    tr.innerHTML = `<td class="mono">${row.person_id}</td>
+      <td><span class="tier ${row.tier}">${row.tier}</span></td>
+      <td>${row.score}</td><td>${row.channel}</td><td class="small">${row.status}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function showPerson(id){
+  current = id;
+  const {body} = await api('/api/person/' + id);
+  const a = body.assessment, p = body.person;
+  const reasons = a.reasons.map(r => `<tr><td>${r.label}</td><td class="small">${r.category}</td><td>+${r.points}</td></tr>`).join('');
+  const hist = body.chain.map(r => `<tr><td class="mono">${r.seq}</td><td>${r.decision}</td>
+      <td class="small">${r.actor ? r.actor.type + ':' + r.actor.id : ''}</td>
+      <td class="mono">${r.hash.slice(0,12)}…</td></tr>`).join('');
+  document.getElementById('detail').innerHTML = `
+    <div class="kv">
+      <div>Person</div><div class="mono">${p.person_id} · ${body.pseudonym}</div>
+      <div>Tier / score</div><div><span class="tier ${a.tier}">${a.tier}</span> score ${a.score} (high ≥ ${a.threshold_high}, moderate ≥ ${a.threshold_moderate})</div>
+      <div>Status</div><div>${body.status || '—'}</div>
+      <div>Consent, secondary use</div><div>${p.consent_secondary_use ? '<span class="badge yes">granted</span>' : '<span class="badge no">withheld</span>'}</div>
+      <div>Consent, outreach</div><div>${p.consent_outreach ? '<span class="badge yes">granted</span>' : '<span class="badge no">withheld</span>'} <span class="small">· channel ${p.preferred_channel}</span></div>
+      <div>Inputs digest</div><div class="mono">${a.inputs_digest}</div>
+      <div>Model</div><div>${a.model_id} ${a.model_version}</div>
+    </div>
+    <h2 style="padding:0 0 8px 0;border:0;background:none;font-size:12px;letter-spacing:.14em;color:var(--muted)">Why this person was flagged</h2>
+    <table><thead><tr><th>Factor</th><th>Category</th><th>Points</th></tr></thead><tbody>${reasons || '<tr><td colspan=3 class="small">below threshold, no contributing factors</td></tr>'}</tbody></table>
+    <div class="row">
+      <button class="primary" ${body.status==='PENDING_APPROVAL'?'':'disabled'} onclick="act('approve')">Approve outreach</button>
+      <button ${body.status==='APPROVED'?'':'disabled'} onclick="act('release')">Release outreach</button>
+      <button ${body.status==='OUTREACH_RELEASED'?'':'disabled'} onclick="act('outcome')">Record outcome: booked</button>
+      <button class="ghost" onclick="downloadPerson('${p.person_id}')">Export audit pack</button>
+    </div>
+    <div id="actFlash" class="flash small"></div>
+    <h2 style="padding:14px 0 8px 0;border:0;background:none;font-size:12px;letter-spacing:.14em;color:var(--muted)">Sealed records for this person</h2>
+    <table><thead><tr><th>Seq</th><th>Decision</th><th>Actor</th><th>Hash</th></tr></thead><tbody>${hist}</tbody></table>`;
+  loadQueue();
+}
+
+async function act(kind){
+  const payload = {person_id: current};
+  if (kind === 'approve'){ payload.approver_id = 'dr.a.khan'; payload.role = 'clinician'; payload.note = 'consent verified, high tier'; }
+  if (kind === 'release'){ payload.released_by = 'dr.a.khan'; }
+  if (kind === 'outcome'){ payload.outcome = 'booked'; }
+  const {body} = await api('/api/' + kind, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  const flash = document.getElementById('actFlash');
+  if (body.error){ flash.innerHTML = `<span style="color:var(--bad)">${body.error}</span>`; return; }
+  flash.innerHTML = `<span style="color:var(--ok)">sealed at seq ${body.sealed.seq} · ${body.sealed.hash.slice(0,16)}…</span>`;
+  await showPerson(current);
+  await loadSummary();
+}
+
+async function verifyChain(){
+  const {body} = await api('/api/verify');
+  document.getElementById('verifyOut').textContent = JSON.stringify(body, null, 2);
+  document.getElementById('verifyFlash').innerHTML = body.ok
+    ? `<span style="color:var(--ok)">verified · ${body.records} records · head ${body.head.slice(0,16)}…</span>`
+    : `<span style="color:var(--bad)">broken at seq ${body.first_bad_seq} · ${body.detail}</span>`;
+  await loadSummary();
+}
+
+async function tamperDemo(){
+  const {body} = await api('/api/tamper', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  document.getElementById('verifyOut').textContent = JSON.stringify(body, null, 2);
+  const t = body.tampered_verify, l = body.live_verify;
+  document.getElementById('verifyFlash').innerHTML =
+    `<span style="color:var(--bad)">tampered copy: ${t.ok ? 'unexpectedly OK' : 'BROKEN at seq ' + t.first_bad_seq}</span>` +
+    ` &nbsp;·&nbsp; <span style="color:var(--ok)">live ledger: ${l.ok ? 'still intact' : 'ALSO BROKEN'}</span>`;
+}
+
+async function loadEquity(){
+  const {body} = await api('/api/equity');
+  const order = ['age_band','sex','area_decile'];
+  document.getElementById('equityOut').innerHTML = order.map(dim => {
+    const rows = Object.entries(body[dim]).sort().map(([k,v]) =>
+      `<tr><td>${k}</td><td>${v.people}</td><td>${(v.flag_rate*100).toFixed(1)}%</td><td>${(v.release_rate*100).toFixed(1)}%</td></tr>`).join('');
+    return `<div class="panel"><h2>${dim.replace('_',' ')}</h2>
+      <table><thead><tr><th>Bucket</th><th>People</th><th>Flagged</th><th>Reached</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+}
+
+function downloadPerson(id){ window.location = '/api/export?person_id=' + id; }
+function downloadCohort(){ window.location = '/api/export/cohort'; }
+
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  ['verify','equity','about'].forEach(t =>
+    document.getElementById('tab-' + t).style.display = (t === b.dataset.tab) ? '' : 'none');
+});
+
+loadSummary(); loadQueue();
+</script>
+</body>
+</html>

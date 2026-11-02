@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/cohort.json
+data/ledger.jsonl
+data/tampered.jsonl
+evidence/*.png
