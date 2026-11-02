@@ -17,7 +17,7 @@ verification fails at that record.
 ## Quick start
 
 ```bash
-cd sel
+git clone https://github.com/narko4u/triage-tek && cd triage-tek
 python3 server.py --port 8795
 # open http://127.0.0.1:8795
 ```
@@ -30,12 +30,6 @@ python3 -m sel.verify --ledger data/ledger.jsonl
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad record
 ```
-
-## What it looks like
-
-![Approval queue and decision detail](docs/images/queue-and-decision.png)
-
-![Verifier after the tamper test](docs/images/verifier-tamper.png)
 
 ## What it does
 
@@ -51,6 +45,16 @@ python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad re
 5. **Seals every transition**: ASSESSED, NO_ACTION, CONSENT_BLOCKED, PENDING_APPROVAL,
    APPROVED, OUTREACH_RELEASED, OUTCOME.
 6. **Verifies on demand**, and exports a per-person audit pack or a cohort-wide CSV.
+
+## What it looks like
+
+*Approval queue on the left, the sealed decision record on the right. Every row is a synthetic person; every transition is sealed.*
+
+![Approval queue and decision detail](docs/images/queue-and-decision.png)
+
+*After the tamper test: the edited copy fails at record 2, the live ledger still verifies clean.*
+
+![Verifier after the tamper test](docs/images/verifier-tamper.png)
 
 ## Measured on this build
 
