@@ -29,6 +29,12 @@ python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --fie
 python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad record
 ```
 
+## What it looks like
+
+![Approval queue and decision detail](docs/images/queue-and-decision.png)
+
+![Verifier after the tamper test](docs/images/verifier-tamper.png)
+
 ## What it does
 
 1. **Generates a synthetic cohort** of 5,000 people from a fixed seed, so the run reproduces

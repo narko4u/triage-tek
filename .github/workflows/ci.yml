@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Seal a full cycle
+        run: |
+          python -c "from sel.engine import Engine; e=Engine('data'); r=e.run_cycle(); assert r['chain_ok'], r; print(r)"
+
+      - name: Verify the live chain
+        run: python -m sel.verify --ledger data/ledger.jsonl
+
+      - name: Tamper with one record
+        run: python -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
+
+      - name: The tampered copy must fail verification
+        run: |
+          if python -m sel.verify --ledger data/tampered.jsonl; then
+            echo "FAIL: tampered ledger verified clean"
+            exit 1
+          else
+            echo "PASS: tampered ledger rejected"
+          fi
