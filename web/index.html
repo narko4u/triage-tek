@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Screening Evidence Layer</title>
+<title>TriageTek</title>
 <style>
   :root{
     --bg:#0b1220; --panel:#121b2e; --panel2:#16213a; --line:#22304d;
@@ -59,12 +59,12 @@
 <body>
 <header>
   <div>
-    <h1>Screening Evidence Layer</h1>
+    <h1>TriageTek</h1>
     <div class="sub">Consent-bound screening triage with a sealed, tamper-evident record of every decision</div>
   </div>
   <div class="spacer"></div>
   <div id="chainPill" class="pill">checking chain…</div>
-  <div id="headPill" class="pill mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">head —</div>
+  <div id="headPill" class="pill mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">head -</div>
 </header>
 
 <main>
@@ -159,7 +159,7 @@ async function showPerson(id){
     <div class="kv">
       <div>Person</div><div class="mono">${p.person_id} · ${body.pseudonym}</div>
       <div>Tier / score</div><div><span class="tier ${a.tier}">${a.tier}</span> score ${a.score} (high ≥ ${a.threshold_high}, moderate ≥ ${a.threshold_moderate})</div>
-      <div>Status</div><div>${body.status || '—'}</div>
+      <div>Status</div><div>${body.status || '-'}</div>
       <div>Consent, secondary use</div><div>${p.consent_secondary_use ? '<span class="badge yes">granted</span>' : '<span class="badge no">withheld</span>'}</div>
       <div>Consent, outreach</div><div>${p.consent_outreach ? '<span class="badge yes">granted</span>' : '<span class="badge no">withheld</span>'} <span class="small">· channel ${p.preferred_channel}</span></div>
       <div>Inputs digest</div><div class="mono">${a.inputs_digest}</div>

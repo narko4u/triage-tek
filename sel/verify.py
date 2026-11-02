@@ -31,9 +31,9 @@ def main(argv=None):
         print("records :", len(led))
         print("head    :", led.head)
         if ok:
-            print("result  : CHAIN OK —", detail)
+            print("result  : CHAIN OK -", detail)
         else:
-            print("result  : CHAIN BROKEN at seq", bad, "—", detail)
+            print("result  : CHAIN BROKEN at seq", bad, "-", detail)
     return 0 if ok else 1
 
 

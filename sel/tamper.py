@@ -55,7 +55,7 @@ def main(argv=None):
     info = tamper(args.ledger, args.out, seq, args.field, args.value)
     print("tampered record", info["seq"], "field", info["field"], ":", info["before"], "->", info["after"])
     ok, bad, detail = Ledger(args.out).verify()
-    print("verify tampered copy:", "OK (unexpected)" if ok else "BROKEN at seq %s — %s" % (bad, detail))
+    print("verify tampered copy:", "OK (unexpected)" if ok else "BROKEN at seq %s - %s" % (bad, detail))
     return 0 if not ok else 2
 
 

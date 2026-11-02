@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Screening Evidence Layer — demo server.
+"""TriageTek - demo server.
 
 Standard library only. No accounts, no external services, no network calls.
 Run: python3 server.py [--port 8791]
@@ -195,7 +195,7 @@ def main():
         print("cycle:", json.dumps(result))
 
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    print("Screening Evidence Layer on http://%s:%d" % (args.host, args.port))
+    print("TriageTek on http://%s:%d" % (args.host, args.port))
     print("ledger records:", len(ENGINE.ledger))
     try:
         srv.serve_forever()

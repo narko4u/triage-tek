@@ -1,9 +1,11 @@
-# Screening Evidence Layer
+# TriageTek
 
-A working prototype for the **Future Health Digital Innovation Challenge** (Challenge 04,
+**Screening evidence infrastructure for population health programmes.**
+
+TriageTek is a working prototype for the **Future Health Digital Innovation Challenge** (Challenge 04,
 Precision Prevention and Screening), GITEX Dubai 2026.
 
-The prototype does not try to out-model anyone. It answers the question a screening
+It does not try to out-model anyone. It answers the question a screening
 programme cannot answer today: **can you prove what happened to this person's data and this
 person's decision, six months later, to an auditor who was not in the room?**
 
