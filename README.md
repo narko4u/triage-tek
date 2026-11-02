@@ -1,5 +1,7 @@
 # TriageTek
 
+![ci](https://github.com/narko4u/triage-tek/actions/workflows/ci.yml/badge.svg)
+
 **Screening evidence infrastructure for population health programmes.**
 
 TriageTek is a working prototype for the **Future Health Digital Innovation Challenge** (Challenge 04,
