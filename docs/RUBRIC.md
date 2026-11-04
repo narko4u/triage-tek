@@ -19,14 +19,23 @@ impact is on completion rates and on the ability to run a programme that survive
   (`Engine._replay`).
 - Canonical JSON so hashes are portable across languages and machines (`sel/canonical.py`).
 - Consent enforced inside the state machine, not in the UI (`Engine.approve` refuses).
-- Zero runtime dependencies; stdlib HTTP server; the whole system runs offline.
-- 13 unit tests covering chain integrity, tamper localisation, deletion detection,
-  consent refusal, transition ordering and replay.
+- **Hybrid post-quantum signing**: Ed25519 on every record, ML-DSA-65 (FIPS 204) over a Merkle
+  root every 250 records, both halves required, algorithm named in the record so a future
+  suite can be added without re-cutting the chain (`sel/pqc.py`, `docs/HYBRID-PQC.md`).
+- **The forgery is shipped, not described**: `sel/forge.py` rebuilds the ledger with every
+  signature stripped and every hash recomputed, and the verifier refuses it.
+- Zero runtime dependencies in the default profile; stdlib HTTP server; the whole system runs
+  offline. The signing extra is opt-in.
+- 25 tests: 13 core covering chain integrity, tamper localisation, deletion detection, consent
+  refusal, transition ordering and replay, plus 12 for the hybrid profile including a
+  signature-stripping forgery.
 
 ## 3. Working solution and demonstration quality
 
-Working, not mocked: 5,000 synthetic people assessed in 0.5 s, 5,844 sealed records, chain
-verification clean, tamper test failing at the exact edited record. The demo is one command.
+Working, not mocked: 5,000 synthetic people assessed in 0.354 s, 5,841 sealed records, chain
+verification clean, tamper test failing at the exact edited record. With the hybrid profile:
+5,867 records, 25 ML-DSA-65 checkpoints, both halves verifying, and a forged copy refused.
+The demo is one command.
 `docs/DEMO.md` is the four-minute script.
 
 ## 4. Responsible AI, safety and data governance
@@ -39,8 +48,12 @@ verification clean, tamper test failing at the exact edited record. The demo is 
   named rule rather than buried in a weight.
 - **Data minimisation**: pseudonymous subjects, digests of inputs, no raw record content in
   the ledger.
-- **Limits published**: `docs/LIMITATIONS.md` states the tamper-evident boundary, the synthetic
-  data, the missing revocation path and the uncalibrated model.
+- **Evidence that outlives its algorithm**: every record is bound into a post-quantum signed
+  checkpoint, so a screening record sealed today still verifies after the classical algorithms
+  are retired. Key custody is named as the remaining trust dependency rather than hidden.
+- **Limits published**: `docs/LIMITATIONS.md` states the tamper-evident boundary of the bare
+  chain, the key custody dependency, the synthetic data, the missing revocation path and the
+  uncalibrated model.
 
 ## 5. Scalability and deployment readiness
 
