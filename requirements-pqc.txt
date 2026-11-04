@@ -1,0 +1,4 @@
+# Optional extra for the hybrid post-quantum evidence profile.
+# The default profile runs on the standard library alone.
+cryptography>=42
+pqcrypto==1.0.0

@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify:
+  stdlib:
+    name: default profile, no dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,23 +16,62 @@ jobs:
           python-version: "3.12"
 
       - name: Unit tests
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -p "test_core.py" -v
 
       - name: Seal a full cycle
         run: |
           python -c "from sel.engine import Engine; e=Engine('data'); r=e.run_cycle(); assert r['chain_ok'], r; print(r)"
 
       - name: Verify the live chain
-        run: python -m sel.verify --ledger data/ledger.jsonl
+        run: python -m sel.verify --ledger data/ledger.jsonl --chain-only
 
       - name: Tamper with one record
         run: python -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 
       - name: The tampered copy must fail verification
         run: |
-          if python -m sel.verify --ledger data/tampered.jsonl; then
+          if python -m sel.verify --ledger data/tampered.jsonl --chain-only; then
             echo "FAIL: tampered ledger verified clean"
             exit 1
           else
             echo "PASS: tampered ledger rejected"
+          fi
+
+  hybrid:
+    name: hybrid profile, Ed25519 plus ML-DSA-65
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the post-quantum extra
+        run: python -m pip install --quiet -r requirements-pqc.txt pytest
+
+      - name: Full test suite
+        run: python -m pytest tests -q
+
+      - name: Seal a hybrid cycle
+        run: python -m sel.hybrid --data-dir data-hybrid --fresh
+
+      - name: Verify both signature halves
+        run: python -m sel.verify --ledger data-hybrid/ledger.jsonl
+
+      - name: Publish the signing benchmark
+        run: python -m sel.hybrid --bench
+
+      - name: Forge a copy with every signature stripped
+        run: python -m sel.forge --ledger data-hybrid/ledger.jsonl --out data-hybrid/forged.jsonl --field tier --value LOW
+
+      - name: The forged copy re-hashes cleanly
+        run: python -m sel.verify --ledger data-hybrid/forged.jsonl --chain-only
+
+      - name: The forged copy must fail the signature layer
+        run: |
+          if python -m sel.verify --ledger data-hybrid/forged.jsonl; then
+            echo "FAIL: forged ledger passed the signature layer"
+            exit 1
+          else
+            echo "PASS: forged ledger refused at the signature layer"
           fi

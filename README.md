@@ -18,6 +18,38 @@ verification fails at that record.
 
 ![TriageTek marketing image](docs/images/triagetek-marketing.png)
 
+## Hybrid post-quantum evidence
+
+A hash chain proves a record was not edited. It does not prove who wrote it, because anyone
+with write access can rebuild the whole chain. TriageTek's optional hybrid profile signs every
+record twice, once with Ed25519 and once with ML-DSA-65 (FIPS 204), and the verifier requires
+both halves.
+
+Ed25519 signs each record. ML-DSA-65 signs a Merkle root every 250 records, so every record
+inherits the post-quantum guarantee without paying 10 ms per record. If either algorithm falls,
+the other one still carries the evidence, and a record sealed today still verifies after the
+transition.
+
+| Claim | Observed on this build |
+|---|---|
+| Records sealed | 5,867, of which 5,841 signed |
+| Checkpoints | 25 ML-DSA-65 signed Merkle roots |
+| Hybrid verification | `both signature halves verify across 5,841 records in 25 checkpoints` |
+| Forged copy, signatures stripped, hashes recomputed | chain `OK`, signatures `FAILED` |
+| Cycle runtime | 0.354 s unsigned, 0.716 s hybrid |
+| Tests | 25 passed |
+
+```bash
+pip install -r requirements-pqc.txt
+python3 -m sel.hybrid --data-dir data-hybrid --fresh
+python3 -m sel.verify --ledger data-hybrid/ledger.jsonl
+python3 -m sel.forge --ledger data-hybrid/ledger.jsonl --out data-hybrid/forged.jsonl --field tier --value LOW
+python3 -m sel.verify --ledger data-hybrid/forged.jsonl   # exits 1, names the failing half
+SEL_DATA=data-hybrid SEL_HYBRID=1 python3 server.py --port 8795   # /api/verify reports both halves
+```
+
+Design, threat model and the published signing benchmark: [docs/HYBRID-PQC.md](docs/HYBRID-PQC.md).
+
 ## Quick start
 
 ```bash
@@ -26,10 +58,11 @@ python3 server.py --port 8795
 # open http://127.0.0.1:8795
 ```
 
-No dependencies, no network calls, no accounts. Python 3.11+.
+No dependencies for the default profile, no network calls, no accounts. Python 3.11+.
+The hybrid profile adds one optional extra, listed in `requirements-pqc.txt`.
 
 ```bash
-python3 -m unittest discover -s tests -v      # 13 tests
+python3 -m pytest tests -q                    # 25 tests with the extra, 13 without
 python3 -m sel.verify --ledger data/ledger.jsonl
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad record
@@ -64,12 +97,12 @@ python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad re
 
 | Claim | Observed |
 |---|---|
-| Records sealed | 5,844 across 5,000 people |
-| Chain verification | `chain intact across 5,844 records` |
+| Records sealed | 5,841 across 5,000 people, 5,867 with hybrid checkpoints |
+| Chain verification | `chain intact across 5,867 records` |
 | Tamper test | edited record 2, `HIGH` to `LOW`; verifier `BROKEN at seq 2` |
 | Live ledger after tamper test | still intact (the test runs on a copy) |
-| Tests | 13 passed |
-| Cycle runtime | 0.5 s for 5,000 assessments |
+| Tests | 13 without the extra, 25 with it |
+| Cycle runtime | 0.354 s for 5,000 assessments, 0.716 s hybrid |
 
 Numbers above are from an actual run on this machine, not estimates. Regenerate them with
 the commands in Quick start.
@@ -77,9 +110,10 @@ the commands in Quick start.
 ## Honest limits
 
 The cohort is synthetic. The risk model is illustrative and uncalibrated. There is no
-clinical validation and no outcome claim. The chain is tamper-**evident**, not
-tamper-proof: someone with write access can rewrite the chain from the edit forward, which
-is exactly why the head hash gets published elsewhere. Full list in
+clinical validation and no outcome claim. The bare hash chain is tamper-**evident**, not
+tamper-proof: someone with write access can rewrite it from the edit forward. The hybrid
+profile closes that, because a rewrite needs the signing keys, but it moves the trust question
+to key custody rather than deleting it. Full list in
 [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Layout
@@ -88,6 +122,9 @@ is exactly why the head hash gets published elsewhere. Full list in
 sel/
   sel/canonical.py   canonical JSON + sha256
   sel/ledger.py      append-only hash-chained ledger
+  sel/pqc.py         hybrid signing: Ed25519 per record, ML-DSA-65 checkpoints
+  sel/hybrid.py      hybrid profile runner and signing benchmark
+  sel/forge.py       the forgery the signature layer is built to catch
   sel/cohort.py      seeded synthetic cohort
   sel/risk.py        transparent points model
   sel/engine.py      pathway state machine, rebuilt from the ledger on restart
@@ -95,7 +132,7 @@ sel/
   sel/tamper.py      tamper harness (works on a copy)
   server.py          stdlib HTTP server, no dependencies
   web/index.html     demo interface
-  tests/             13 unit tests
+  tests/             25 tests, 12 of them for the hybrid profile
   data/              generated cohort and ledger
   docs/              architecture, limits, demo script, rubric map
 ```

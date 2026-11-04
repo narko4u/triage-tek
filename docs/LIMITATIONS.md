@@ -22,12 +22,21 @@ claim.
 
 ## Integrity
 
-- **Tamper-evident, not tamper-proof.** Each record hashes its own content plus the previous
-  record's hash. That detects edits, insertions and deletions, and localises them. It does not
-  prevent someone with write access from recomputing the chain from the edit point forward.
-  The mitigation is publication: send the head hash somewhere the writer does not control
-  (a timestamping authority, a second custodian, or a public chain). The prototype exposes the
-  head hash so that anchoring can be added without changing the record format.
+- **Tamper-evident, not tamper-proof, in the default profile.** Each record hashes its own
+  content plus the previous record's hash. That detects edits, insertions and deletions, and
+  localises them. It does not prevent someone with write access from recomputing the chain
+  from the edit point forward. The mitigation is publication: send the head hash somewhere the
+  writer does not control (a timestamping authority, a second custodian, or a public chain).
+  The prototype exposes the head hash so that anchoring can be added without changing the
+  record format.
+- **The hybrid profile moves the problem to key custody, it does not delete it.** With
+  Ed25519 and ML-DSA-65 signatures, a rewrite needs the private keys, not just write access.
+  Whoever holds those keys can still sign a false history. Key custody, rotation and
+  revocation are deployment responsibilities outside this prototype, and the KEY record inside
+  the ledger is self signed, so trusting a bare file is circular until its fingerprint is
+  pinned out of band.
+- **Hybrid signing costs runtime.** Measured at 0.354 s unsigned against 0.716 s hybrid for
+  5,000 assessments. That is acceptable here and would need re-measuring at national scale.
 - **The tamper demo edits a copy.** The live ledger is never modified by the demo, which is why
   it verifies clean immediately afterwards. A demo that damaged its own evidence would prove
   the opposite of the claim.

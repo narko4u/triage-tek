@@ -11,6 +11,7 @@ import os
 import threading
 from datetime import datetime, timezone
 
+from . import pqc
 from .canonical import digest, dumps
 
 GENESIS = "0" * 64
@@ -21,10 +22,12 @@ def utc_now():
 
 
 class Ledger:
-    def __init__(self, path):
+    def __init__(self, path, signer=None):
         self.path = path
+        self.signer = signer
         self._lock = threading.Lock()
         self._records = []
+        self._covered_to = -1
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as fh:
@@ -32,6 +35,9 @@ class Ledger:
                     line = line.strip()
                     if line:
                         self._records.append(json.loads(line))
+        for rec in self._records:
+            if rec.get("kind") == pqc.KIND_CHECKPOINT:
+                self._covered_to = max(self._covered_to, int(rec.get("to_seq", -1)))
 
     # ---- reading -------------------------------------------------------
     def __len__(self):
@@ -47,6 +53,8 @@ class Ledger:
     def find(self, subject=None, decision=None):
         out = []
         for r in self._records:
+            if r.get("kind") in (pqc.KIND_KEY, pqc.KIND_CHECKPOINT):
+                continue
             if subject and r.get("subject") != subject:
                 continue
             if decision and r.get("decision") != decision:
@@ -63,21 +71,75 @@ class Ledger:
 
     def append(self, _fsync=True, **fields):
         with self._lock:
-            seq = len(self._records)
-            record = {
-                "seq": seq,
-                "prev_hash": self.head,
-                "sealed_at": utc_now(),
-            }
-            record.update(fields)
-            record["hash"] = digest(record)
-            with open(self.path, "a", encoding="utf-8") as fh:
-                fh.write(dumps(record) + "\n")
-                fh.flush()
-                if _fsync:
-                    os.fsync(fh.fileno())
-            self._records.append(record)
-            return record
+            return self._append_locked(_fsync, fields)
+
+    def add_key_record(self):
+        """Seal the public signing material as the first signed record."""
+        if self.signer is None:
+            raise RuntimeError("this ledger has no signer")
+        with self._lock:
+            if self._records:
+                raise RuntimeError("the key record must be the first record")
+            body = {"seq": 0, "prev_hash": GENESIS, "sealed_at": utc_now(),
+                    "kind": pqc.KIND_KEY}
+            body.update(self.signer.key_record_fields())
+            ed_sig, ml_sig = self.signer.sign_checkpoint(body)
+            body["sig"] = ed_sig
+            body["mldsa_sig"] = ml_sig
+            return self._write_locked(body, _fsync=True, checkpoint=False)
+
+    def _append_locked(self, _fsync, fields):
+        body = {"seq": len(self._records), "prev_hash": self.head, "sealed_at": utc_now()}
+        body.update(fields)
+        if self.signer is not None:
+            body["sig"] = self.signer.sign_record(body)
+        return self._write_locked(body, _fsync)
+
+    def _write_locked(self, body, _fsync=True, checkpoint=True):
+        record = dict(body)
+        record["hash"] = digest(record)
+        with open(self.path, "a", encoding="utf-8") as fh:
+            fh.write(dumps(record) + "\n")
+            fh.flush()
+            if _fsync:
+                os.fsync(fh.fileno())
+        self._records.append(record)
+        if (checkpoint and self.signer is not None
+                and len(self._records) % pqc.CHECKPOINT_EVERY == 0):
+            self._append_checkpoint_locked()
+        return record
+
+    def _append_checkpoint_locked(self):
+        from_seq = self._covered_to + 1
+        to_seq = len(self._records) - 1
+        segment = [r["hash"] for r in self._records[from_seq:to_seq + 1]]
+        body = {
+            "seq": len(self._records),
+            "prev_hash": self.head,
+            "sealed_at": utc_now(),
+            "kind": pqc.KIND_CHECKPOINT,
+            "from_seq": from_seq,
+            "to_seq": to_seq,
+            "merkle_root": pqc.merkle_root(segment),
+            "suite": pqc.SUITE,
+            "fingerprint": self.signer.fingerprint,
+        }
+        ed_sig, ml_sig = self.signer.sign_checkpoint(body)
+        body["sig"] = ed_sig
+        body["mldsa_sig"] = ml_sig
+        self._covered_to = to_seq
+        return self._write_locked(body, _fsync=True, checkpoint=False)
+
+    def seal_checkpoint(self):
+        """Seal a checkpoint now, covering any records since the last one."""
+        with self._lock:
+            if self.signer is None or self._covered_to == len(self._records) - 1:
+                return None
+            return self._append_checkpoint_locked()
+
+    def verify_signatures(self, expected_fingerprint=None):
+        """Verify the hybrid signature layer. Returns a result dict."""
+        return pqc.verify_ledger(self._records, expected_fingerprint)
 
     # ---- verification --------------------------------------------------
     def verify(self):

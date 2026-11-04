@@ -21,8 +21,12 @@ from sel.ledger import Ledger          # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, "web")
-DATA = os.path.join(HERE, "data")
-ENGINE = Engine(DATA)
+DATA = os.environ.get("SEL_DATA") or os.path.join(HERE, "data")
+SIGNER = None
+if os.environ.get("SEL_HYBRID") == "1":
+    from sel import pqc
+    SIGNER = pqc.Signer(os.path.join(DATA, "keys"))
+ENGINE = Engine(DATA, signer=SIGNER)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -68,8 +72,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, ENGINE.equity())
         if path == "/api/verify":
             ok, bad, detail = ENGINE.ledger.verify()
-            return self._send(200, {"ok": ok, "records": len(ENGINE.ledger),
-                                    "head": ENGINE.ledger.head, "first_bad_seq": bad, "detail": detail})
+            payload = {"ok": ok, "records": len(ENGINE.ledger),
+                       "head": ENGINE.ledger.head, "first_bad_seq": bad, "detail": detail}
+            if any(r.get("kind") == "KEY" for r in ENGINE.ledger.all()):
+                payload["signatures"] = ENGINE.ledger.verify_signatures()
+            return self._send(200, payload)
         if path.startswith("/api/person/"):
             pid = path[len("/api/person/"):]
             try:
