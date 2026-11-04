@@ -4,3 +4,11 @@ data/cohort.json
 data/ledger.jsonl
 data/tampered.jsonl
 evidence/*.png
+
+# hybrid profile: generated ledgers and private signing material
+data-hybrid/
+data-ci/
+data-t*/
+data-unsigned/
+keys/
+*.sk

@@ -27,10 +27,13 @@ TERMINAL = {"NO_ACTION", "CONSENT_BLOCKED", "OUTCOME"}
 
 
 class Engine:
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, signer=None):
         self.data_dir = data_dir
         os.makedirs(data_dir, exist_ok=True)
-        self.ledger = Ledger(os.path.join(data_dir, "ledger.jsonl"))
+        self.ledger = Ledger(os.path.join(data_dir, "ledger.jsonl"), signer=signer)
+        if signer is not None and not self.ledger.all():
+            self.ledger.add_key_record()
+            self.ledger.seal_checkpoint()
         self._lock = threading.RLock()
         self.cohort = self._load_cohort()
         self.by_id = {p["person_id"]: p for p in self.cohort}
@@ -52,6 +55,8 @@ class Engine:
     def _replay(self):
         self.state = {}
         for rec in self.ledger.all():
+            if rec.get("kind"):
+                continue
             subj = rec["subject"]
             entry = self.state.setdefault(subj, {"records": [], "status": None, "person_id": rec.get("person_id")})
             entry["records"].append(rec["seq"])
@@ -63,7 +68,7 @@ class Engine:
     def run_cycle(self):
         """Assess the whole cohort and seal one record per person."""
         with self._lock:
-            if self.ledger.all():
+            if any(r.get("decision") for r in self.ledger.all()):
                 return {"skipped": True, "reason": "ledger already contains a cycle"}
             seq_of = {}
             for person in self.cohort:
@@ -157,6 +162,7 @@ class Engine:
                 actor={"type": "human", "id": approver_id},
             )
             self._replay()
+            self.ledger.seal_checkpoint()
             return rec
 
     def release(self, person_id, released_by):
@@ -175,6 +181,7 @@ class Engine:
                 actor={"type": "human", "id": released_by},
             )
             self._replay()
+            self.ledger.seal_checkpoint()
             return rec
 
     def record_outcome(self, person_id, outcome, recorded_by="sel-engine"):
@@ -192,6 +199,7 @@ class Engine:
                 actor={"type": "system", "id": recorded_by},
             )
             self._replay()
+            self.ledger.seal_checkpoint()
             return rec
 
     # ---- views ---------------------------------------------------------
