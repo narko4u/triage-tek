@@ -27,8 +27,8 @@ both halves.
 
 Ed25519 signs each record. ML-DSA-65 signs a Merkle root every 250 records, so every record
 inherits the post-quantum guarantee without paying 10 ms per record. If either algorithm falls,
-the other one still carries the evidence, and a record sealed today still verifies after the
-transition.
+the other one still carries the evidence, and a record sealed today is designed to keep
+verifying after the classical algorithms are retired.
 
 | Claim | Observed on this build |
 |---|---|

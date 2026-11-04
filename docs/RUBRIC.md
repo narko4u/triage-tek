@@ -48,9 +48,9 @@ The demo is one command.
   named rule rather than buried in a weight.
 - **Data minimisation**: pseudonymous subjects, digests of inputs, no raw record content in
   the ledger.
-- **Evidence that outlives its algorithm**: every record is bound into a post-quantum signed
-  checkpoint, so a screening record sealed today still verifies after the classical algorithms
-  are retired. Key custody is named as the remaining trust dependency rather than hidden.
+- **Evidence designed to outlive its algorithm**: every record is bound into a post-quantum
+  signed checkpoint, so a record sealed today is designed to keep verifying after the classical
+  algorithms are retired. Stated as design intent, not as a guaranteed outcome. Key custody is named as the remaining trust dependency rather than hidden.
 - **Limits published**: `docs/LIMITATIONS.md` states the tamper-evident boundary of the bare
   chain, the key custody dependency, the synthetic data, the missing revocation path and the
   uncalibrated model.
