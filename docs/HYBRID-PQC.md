@@ -36,8 +36,8 @@ Two levels, because per-record ML-DSA is honest but slow.
 
 The Ed25519 signature is cheap enough to run on every transition. The ML-DSA signature binds a
 whole segment at once through its Merkle root, so every record in that segment inherits the
-post-quantum guarantee transitively. Twenty four checkpoints cover 5,841 records, which is
-0.2 s of post-quantum signing instead of 51 s.
+post-quantum guarantee transitively. Twenty five checkpoints cover 5,841 records, one sealed at
+start and one every 250 records after it, which is 0.2 s of post-quantum signing instead of 51 s.
 
 Both halves sign a canonical JSON body (sorted keys, no whitespace) so that the bytes signed
 are the bytes verified. The record hash covers the signatures as well, so removing a signature
