@@ -14,6 +14,10 @@ person's decision, six months later, to an auditor who was not in the room?**
 Every step is sealed into an append-only hash chain. Change one field in one record and
 verification fails at that record.
 
+*TriageTek for the Future Health Digital Innovation Challenge: consent first, human approval, every decision preserved.*
+
+![TriageTek marketing image](docs/images/triagetek-marketing.png)
+
 ## Quick start
 
 ```bash
