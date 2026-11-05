@@ -259,16 +259,23 @@ Regenerate every line with the commands below. Nothing in this table is an estim
 ## 11. Threat model and limits
 
 - The bare chain is tamper-**evident**, not tamper-proof. Write access plus time is enough to
-  rebuild it, which is the reason the signing profile exists.
+  rebuild it, which is the reason the signing profile exists. Precisely: tamper-evident to an
+  observer holding the pinned head or the pinned key, not tamper-proof against an operator who
+  controls both the store and the key.
 - Signing moves the trust question to **key custody**. Self-signed keys prove internal
   consistency, not identity. Pin the fingerprint out of band.
 - **Single writer** assumed. Concurrent writers need a sequencer or a log service.
 - **A dropped tail is invisible without a pinned head.** Deleting the newest records leaves a
   shorter chain that is internally consistent. Pass `--expect-head` with the head recorded out
   of band, or anchor the head, and the truncation is caught.
-- **No revocation path** yet. A compromised key cannot be retired in place.
+- **No revocation path** yet. A compromised key cannot be retired in place. A pilot needs a
+  named custodian, an offline or HSM-held key, a rotation schedule and a revocation procedure
+  agreed before it holds real data. That is a deployment decision, not a code claim.
 - The model is **illustrative and uncalibrated**, with no clinical validation and no outcome
   claim. The cohort is synthetic.
+- **Shadow mode exercises the approval path on test cases only.** No outreach is released
+  during the shadow run, so the first live approval happens after the review, with the same
+  sealed record shape a test approval produces.
 - Anchoring the head is still required in production. Signing and anchoring solve different
   halves of the same question.
 
