@@ -9,7 +9,10 @@ import csv
 import io
 import json
 import os
+import shutil
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
@@ -46,6 +49,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Robots-Tag", "noindex, nofollow")
         self.end_headers()
         self.wfile.write(body)
 
@@ -193,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def _tamper(self, seq):
-        src = os.path.join(DATA, "ledger.jsonl")
+        src = os.path.join(ENGINE.data_dir, "ledger.jsonl")
         dst = os.path.join(DATA, "tampered.jsonl")
         if seq is None:
             seq = 0
@@ -246,10 +250,32 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def _rebuild_engine():
+    """Seal a fresh cycle beside the live one, then swap it in."""
+    global ENGINE, DATA
+    staging = DATA.rstrip("/") + ".next"
+    shutil.rmtree(staging, ignore_errors=True)
+    fresh = Engine(staging)
+    fresh.run_cycle()
+    previous = DATA
+    ENGINE, DATA = fresh, staging
+    shutil.rmtree(previous, ignore_errors=True)
+    print("demo reset: %d records, head %s" % (len(ENGINE.ledger), ENGINE.ledger.head[:12]))
+
+
+def _reset_loop(interval):
+    while True:
+        time.sleep(interval)
+        try:
+            _rebuild_engine()
+        except Exception as exc:  # a failed reset must never kill the server
+            print("demo reset failed: %s" % exc)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8791)
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8791)))
+    ap.add_argument("--host", default=os.environ.get("SEL_HOST", "127.0.0.1"))
     args = ap.parse_args()
 
     if not any(r.get("decision") for r in ENGINE.ledger.all()):
@@ -257,6 +283,11 @@ def main():
         print("cycle:", json.dumps(result))
         if SIGNER is not None:
             ENGINE.ledger.seal_checkpoint()
+
+    interval = int(os.environ.get("SEL_DEMO_RESET_SECONDS", "0"))
+    if interval > 0:
+        threading.Thread(target=_reset_loop, args=(interval,), daemon=True).start()
+        print("demo reset every %d seconds" % interval)
 
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print("TriageTek on http://%s:%d" % (args.host, args.port))

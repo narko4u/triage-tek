@@ -69,6 +69,19 @@ python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --fie
 python3 -m sel.verify --ledger data/tampered.jsonl --chain-only # exits 1, names the bad record
 ```
 
+### Run it as a container
+
+```bash
+docker build -t triage-tek .
+docker run --rm -p 8080:8080 triage-tek
+# open http://127.0.0.1:8080
+```
+
+The image carries no data and no secrets. The ledger is deterministic from seed `20261120`, so the
+process seals its own cycle at boot. `SEL_DEMO_RESET_SECONDS=1800` rebuilds the ledger every 30
+minutes, which is how the hosted demo stays clean between visitors; set it to `0` to keep one
+record for the life of the process.
+
 ## What it does
 
 1. **Generates a synthetic cohort** of 5,000 people from a fixed seed, so the run reproduces
