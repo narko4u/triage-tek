@@ -55,14 +55,37 @@ class Ledger:
                 if not line:
                     continue
                 try:
-                    self._records.append(json.loads(line))
+                    rec = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise LedgerFormatError(
                         "line %d is not valid JSON: %s" % (lineno, exc.msg), lineno
                     ) from exc
+                self._check_shape(rec, lineno)
+                self._records.append(rec)
         for rec in self._records:
             if rec.get("kind") == pqc.KIND_CHECKPOINT:
                 self._covered_to = max(self._covered_to, int(rec.get("to_seq", -1)))
+
+    @staticmethod
+    def _check_shape(rec, lineno):
+        """A parsed line must be a record, not just any JSON value."""
+        if not isinstance(rec, dict):
+            raise LedgerFormatError("line %d is not a JSON object" % lineno, lineno)
+        seq = rec.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0:
+            raise LedgerFormatError("line %d has no valid seq" % lineno, lineno)
+        digest_value = rec.get("hash")
+        if not isinstance(digest_value, str) or len(digest_value) != 64:
+            raise LedgerFormatError("line %d has no valid hash" % lineno, lineno)
+        if not isinstance(rec.get("prev_hash"), str):
+            raise LedgerFormatError("line %d has no prev_hash" % lineno, lineno)
+        if rec.get("kind") == pqc.KIND_CHECKPOINT:
+            for field in ("from_seq", "to_seq"):
+                value = rec.get(field)
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise LedgerFormatError(
+                        "line %d checkpoint has no valid %s" % (lineno, field), lineno
+                    )
 
     # ---- reading -------------------------------------------------------
     def __len__(self):

@@ -26,6 +26,10 @@ DECISIONS = (
 TERMINAL = {"NO_ACTION", "CONSENT_BLOCKED", "OUTCOME"}
 
 
+class LedgerIntegrityError(RuntimeError):
+    """The ledger on disk does not verify, so the engine must not act on it."""
+
+
 class Engine:
     def __init__(self, data_dir, signer=None):
         self.data_dir = data_dir
@@ -34,6 +38,11 @@ class Engine:
         if signer is not None and not self.ledger.all():
             self.ledger.add_key_record()
             self.ledger.seal_checkpoint()
+        ok, bad, detail = self.ledger.verify()
+        if not ok:
+            raise LedgerIntegrityError(
+                "refusing to act on a ledger that does not verify: %s at seq %s" % (detail, bad)
+            )
         self._lock = threading.RLock()
         self.cohort = self._load_cohort()
         self.by_id = {p["person_id"]: p for p in self.cohort}

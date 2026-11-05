@@ -11,11 +11,11 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from sel.engine import Engine          # noqa: E402
+from sel.engine import Engine, LedgerIntegrityError   # noqa: E402
 from sel import tamper as tamper_mod   # noqa: E402
 from sel.ledger import Ledger          # noqa: E402
 
@@ -26,7 +26,10 @@ SIGNER = None
 if os.environ.get("SEL_HYBRID") == "1":
     from sel import pqc
     SIGNER = pqc.Signer(os.path.join(DATA, "keys"))
-ENGINE = Engine(DATA, signer=SIGNER)
+try:
+    ENGINE = Engine(DATA, signer=SIGNER)
+except LedgerIntegrityError as exc:
+    raise SystemExit(str(exc))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -67,7 +70,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/summary":
             return self._send(200, ENGINE.summary())
         if path == "/api/queue":
-            return self._send(200, {"queue": ENGINE.queue(int(q.get("limit", ["150"])[0]))})
+            try:
+                limit = int(q.get("limit", ["150"])[0])
+            except (TypeError, ValueError):
+                return self._send(400, {"error": "limit must be an integer"})
+            if not 1 <= limit <= 500:
+                return self._send(400, {"error": "limit must be between 1 and 500"})
+            return self._send(200, {"queue": ENGINE.queue(limit)})
         if path == "/api/equity":
             return self._send(200, ENGINE.equity())
         if path == "/api/verify":
@@ -78,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload["signatures"] = ENGINE.ledger.verify_signatures()
             return self._send(200, payload)
         if path.startswith("/api/person/"):
-            pid = path[len("/api/person/"):]
+            pid = unquote(path[len("/api/person/"):])
             try:
                 return self._send(200, ENGINE.person_view(pid))
             except KeyError:
@@ -88,7 +97,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/export":
             pid = q.get("person_id", [None])[0]
             if not pid:
-                return self._send(400, {"error": "person_id required"})
+                return self._send(400, {"error": "missing required field"})
             try:
                 return self._export_person(pid)
             except KeyError:
@@ -103,27 +112,47 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._send(400, {"error": "invalid json"})
 
+        if not isinstance(body, dict):
+            return self._send(400, {"error": "body must be a JSON object"})
+
         if u.path == "/api/approve":
+            if not body.get("person_id"):
+                return self._send(400, {"error": "person_id required"})
             try:
                 rec = ENGINE.approve(body["person_id"], body.get("approver_id", "clinician"),
                                      body.get("role", "clinician"), body.get("note", ""))
-            except (KeyError, ValueError) as exc:
+            except KeyError:
+                return self._send(404, {"error": "no such person"})
+            except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
             return self._send(200, {"sealed": rec})
         if u.path == "/api/release":
+            if not body.get("person_id"):
+                return self._send(400, {"error": "person_id required"})
             try:
                 rec = ENGINE.release(body["person_id"], body.get("released_by", "clinician"))
-            except (KeyError, ValueError) as exc:
+            except KeyError:
+                return self._send(404, {"error": "no such person"})
+            except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
             return self._send(200, {"sealed": rec})
         if u.path == "/api/outcome":
+            if not body.get("person_id") or not body.get("outcome"):
+                return self._send(400, {"error": "person_id and outcome required"})
             try:
                 rec = ENGINE.record_outcome(body["person_id"], body["outcome"])
-            except (KeyError, ValueError) as exc:
+            except KeyError:
+                return self._send(404, {"error": "no such person"})
+            except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
             return self._send(200, {"sealed": rec})
         if u.path == "/api/tamper":
-            return self._tamper(body.get("seq"))
+            seq = body.get("seq")
+            if seq is not None and (not isinstance(seq, int) or isinstance(seq, bool) or seq < 0):
+                return self._send(400, {"error": "seq must be a non-negative integer"})
+            if seq is not None and seq >= len(ENGINE.ledger):
+                return self._send(400, {"error": "seq out of range"})
+            return self._tamper(seq)
         if u.path == "/api/reset":
             return self._send(403, {"error": "reset disabled: the record is append-only by design"})
 
@@ -200,9 +229,11 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
 
-    if not ENGINE.ledger.all():
+    if not any(r.get("decision") for r in ENGINE.ledger.all()):
         result = ENGINE.run_cycle()
         print("cycle:", json.dumps(result))
+        if SIGNER is not None:
+            ENGINE.ledger.seal_checkpoint()
 
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print("TriageTek on http://%s:%d" % (args.host, args.port))

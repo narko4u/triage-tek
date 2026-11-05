@@ -37,7 +37,7 @@ verifying after the classical algorithms are retired.
 | Hybrid verification | `both signature halves verify across 5,841 records in 25 checkpoints` |
 | Forged copy, signatures stripped, hashes recomputed | chain `OK`, signatures `FAILED` |
 | Cycle runtime | 0.354 s unsigned, 0.716 s hybrid |
-| Tests | 27 passed |
+| Tests | 30 passed |
 
 ```bash
 pip install -r requirements-pqc.txt
@@ -63,7 +63,7 @@ No dependencies for the default profile, no network calls, no accounts. Python 3
 The hybrid profile adds one optional extra, listed in `requirements-pqc.txt`.
 
 ```bash
-python3 -m pytest tests -q                    # 27 tests with the extra, 15 without
+python3 -m pytest tests -q                    # 30 tests with the extra, 18 without
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only   # default profile is unsigned
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 python3 -m sel.verify --ledger data/tampered.jsonl --chain-only # exits 1, names the bad record
@@ -133,7 +133,7 @@ sel/
   sel/tamper.py      tamper harness (works on a copy)
   server.py          stdlib HTTP server, no dependencies
   web/index.html     demo interface
-  tests/             27 tests, 12 of them for the hybrid profile
+  tests/             30 tests, 12 of them for the hybrid profile
   data/              generated cohort and ledger
   docs/              architecture, limits, demo script, rubric map
 ```

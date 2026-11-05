@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from sel import cohort, risk
-from sel.engine import Engine
+from sel.engine import Engine, LedgerIntegrityError
 from sel.ledger import Ledger, LedgerFormatError
 from sel.tamper import tamper
 
@@ -95,6 +95,28 @@ class TestLedger(unittest.TestCase):
             Ledger(self.path)
         self.assertEqual(ctx.exception.line, 3)
 
+    def test_missing_ledger_is_not_reported_as_verified(self):
+        import contextlib
+        import io
+        from sel.verify import main as verify_main
+        missing = os.path.join(self.dir, "does-not-exist.jsonl")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(verify_main(["--ledger", missing, "--chain-only"]), 1)
+
+    def test_non_record_json_is_a_format_error(self):
+        payloads = [
+            "[]\n",
+            '{"seq": 0}\n',
+            '{"seq": 0, "hash": "%s", "prev_hash": "%s", "kind": "CHECKPOINT", "to_seq": "bad"}\n'
+            % ("a" * 64, "0" * 64),
+        ]
+        for i, payload in enumerate(payloads):
+            path = os.path.join(self.dir, "bad%d.jsonl" % i)
+            with open(path, "w") as fh:
+                fh.write(payload)
+            with self.assertRaises(LedgerFormatError):
+                Ledger(path)
+
     def test_tail_truncation_needs_a_pinned_head(self):
         import contextlib
         import io
@@ -132,6 +154,18 @@ class TestEngine(unittest.TestCase):
             person = self.engine.by_id[row["person_id"]]
             self.assertTrue(person["consent_secondary_use"], row)
             self.assertTrue(person["consent_outreach"], row)
+
+    def test_damaged_ledger_refuses_to_start(self):
+        self.engine.run_cycle()
+        path = os.path.join(self.engine.data_dir, "ledger.jsonl")
+        with open(path) as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+        rows[2]["score"] = rows[2].get("score", 0) + 1
+        with open(path, "w") as fh:
+            for r in rows:
+                fh.write(json.dumps(r) + "\n")
+        with self.assertRaises(LedgerIntegrityError):
+            Engine(self.engine.data_dir)
 
     def test_unconsented_person_cannot_be_approved(self):
         self.engine.run_cycle()

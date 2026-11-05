@@ -10,7 +10,7 @@ measured on this tree.
 - **Tree:** `84458a1` on `main`, identical to `origin/main` at `5cc98e5`
 - **Runtime:** Python 3.11+, standard library only for the default profile
 - **Optional extra:** `cryptography==50.0.2`, `pqcrypto==1.0.0` for the hybrid signing profile
-- **Tests:** 25 with the extra installed, 13 without
+- **Tests:** 30 with the extra installed, 18 without
 - **Data:** synthetic, seed `20261120`, no real person, no network calls, no accounts
 
 ## 1. Process shape
@@ -46,16 +46,16 @@ Three properties matter to a reviewer:
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 182 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 205 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
-| `sel/engine.py` | state machine, replay, queue, equity | 276 |
-| `sel/verify.py` | CLI verifier, both layers | 85 |
+| `sel/engine.py` | state machine, replay, queue, equity | 285 |
+| `sel/verify.py` | CLI verifier, both layers | 101 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and signing benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness, operates on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 217 |
+| `server.py` | stdlib HTTP API and static host | 248 |
 | `web/index.html` | demo interface | 237 |
 
 ## 3. Record model
@@ -153,8 +153,9 @@ and 4 for MODERATE, both written into the record.
 It returns the **first failing index and a reason** (content mismatch, broken link, out of
 order), not a boolean. An auditor needs localisation, not a verdict.
 
-A line that is not valid JSON or not valid UTF-8 is a **format error**, reported with its line
-number, rather than a shorter chain that still verifies.
+A line that is not valid JSON, not valid UTF-8, or a JSON value that is not a record object is
+a **format error**, reported with its line number, rather than a shorter chain that still
+verifies. A path that does not exist is an error too, not an empty ledger that reports success.
 
 A dropped tail is a different case. Removing the last records leaves a chain that is internally
 consistent, so on its own it verifies clean. `--expect-head` takes the head hash pinned out of
@@ -219,7 +220,7 @@ approval step, which is why the actor is a field in the record rather than a ses
 
 ## 9. Tests and CI
 
-27 tests, 15 core and 12 hybrid. The core tests are `unittest` (no third-party dependency),
+30 tests, 18 core and 12 hybrid. The core tests are `unittest` (no third-party dependency),
 the hybrid tests are `pytest`. CI runs two jobs on Python 3.12: a stdlib job that seals, verifies
 and tampers, and a hybrid job that installs the pinned extra and repeats seal, verify, tamper,
 forge and the signing benchmark.
@@ -230,7 +231,9 @@ forge and the signing benchmark.
 | Ledger | append, head, dense sequence, link integrity |
 | Tamper | an edited field fails at that record, with the right index |
 | Truncation | a dropped tail verifies alone and fails against the pinned head |
-| Corrupt file | a truncated or non-UTF-8 line is a format error with its line number |
+| Corrupt file | a truncated, non-UTF-8 or non-record line is a format error with its line number |
+| Missing file | a path that does not exist exits 1 instead of reporting an empty ledger |
+| Startup | a damaged ledger is refused before any further approval can be sealed |
 | Consent | approval is refused without outreach consent, at engine level |
 | Replay | state rebuilt from the ledger matches live state |
 | Risk | reasons sum to the score, thresholds applied as published |
@@ -249,7 +252,7 @@ forge and the signing benchmark.
 | Hybrid verification | both halves verify across 5,841 records in 25 checkpoints |
 | Tamper test | edit record 2, `BROKEN at seq 2`, live ledger intact |
 | Forgery | chain `OK`, signatures `FAILED at seq 0` |
-| Tests | 27 passed |
+| Tests | 30 passed |
 
 Regenerate every line with the commands below. Nothing in this table is an estimate.
 
@@ -273,7 +276,7 @@ Regenerate every line with the commands below. Nothing in this table is an estim
 
 ```bash
 git clone https://github.com/narko4u/triage-tek && cd triage-tek
-python3 -m unittest discover -s tests -p "test_core.py" -v   # 15 core tests
+python3 -m unittest discover -s tests -p "test_core.py" -v   # 18 core tests
 python3 server.py --port 8795                    # first run generates data/ and runs a cycle
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only --expect-head <hash from a trusted transcript>
@@ -281,7 +284,7 @@ python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --fie
 python3 -m sel.verify --ledger data/tampered.jsonl --chain-only   # exits 1, names the record
 
 pip install -r requirements-pqc.txt
-python3 -m pytest tests -q                       # 27 passed
+python3 -m pytest tests -q                       # 30 passed
 python3 -m sel.hybrid --data-dir data-hybrid --fresh
 python3 -m sel.verify --ledger data-hybrid/ledger.jsonl
 

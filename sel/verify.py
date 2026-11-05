@@ -7,6 +7,7 @@ printed together with which half failed.
 """
 import argparse
 import json
+import os
 import sys
 
 from .ledger import Ledger, LedgerFormatError
@@ -23,6 +24,21 @@ def main(argv=None):
                     help="verify the hash chain and skip the signature layer")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+
+    if not os.path.exists(args.ledger):
+        result = {
+            "ok": False,
+            "records": None,
+            "head": None,
+            "first_bad_seq": None,
+            "detail": "ledger not found: %s" % args.ledger,
+            "signatures": None,
+        }
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("chain   : BROKEN - ledger not found:", args.ledger)
+        return 1
 
     try:
         led = Ledger(args.ledger)

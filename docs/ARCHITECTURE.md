@@ -37,7 +37,7 @@ a schema registry.
 ```json
 {
   "seq": 3826,
-  "ts": "2026-11-02T00:12:44.118Z",
+  "sealed_at": "2026-11-02T00:12:44.118Z",
   "decision": "PENDING_APPROVAL",
   "subject": "psn_5b7def8245d19838eb6c1249",
   "person_id": "SEL-03827",
@@ -50,13 +50,13 @@ a schema registry.
   "thresholds": {"high": 6, "moderate": 4},
   "consent": {"secondary_use": true, "outreach": true},
   "actor": {"type": "system", "id": "sel-engine"},
-  "prev": "4318...",
+  "prev_hash": "4318...",
   "sig": "MEUCIQ...",
   "hash": "2fd1..."
 }
 ```
 
-`hash = sha256(canonical_json(record without "hash"))`, and the record includes `prev`, so the
+`hash = sha256(canonical_json(record without "hash"))`, and the record includes `prev_hash`, so the
 hash commits to the entire history behind it. When the hybrid profile is on, `sig` holds an
 Ed25519 signature over the record body, and the hash covers the signature as well, so removing
 a signature also breaks the chain.
@@ -106,23 +106,23 @@ that does not follow this graph.
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 182 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 205 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
-| `sel/engine.py` | state machine, replay, equity, queue | 276 |
-| `sel/verify.py` | CLI verifier, both layers | 85 |
+| `sel/engine.py` | state machine, replay, equity, queue | 285 |
+| `sel/verify.py` | CLI verifier, both layers | 101 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 217 |
+| `server.py` | stdlib HTTP API and static host | 248 |
 | `web/index.html` | demo interface | 237 |
-| `tests/test_core.py` | 15 core unit tests | 169 |
+| `tests/test_core.py` | 18 core unit tests | 203 |
 | `tests/test_hybrid.py` | 12 hybrid profile tests | 172 |
 
 ## Verification
 
-`verify()` recomputes every record's hash from its own content and checks that `prev` equals
+`verify()` recomputes every record's hash from its own content and checks that `prev_hash` equals
 the previous record's `hash`. It returns the first index that fails and a reason: content
 mismatch, broken link, or out-of-order sequence. `verify_signatures()` then checks both halves,
 the Ed25519 signature on every record and the ML-DSA-65 checkpoint that covers it, and reports
