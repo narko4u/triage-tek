@@ -16,6 +16,7 @@ pytest.importorskip("pqcrypto", reason="the hybrid profile needs the pqcrypto ex
 
 from sel import pqc
 from sel.canonical import digest
+from sel.engine import Engine, LedgerIntegrityError
 from sel.ledger import Ledger
 
 pytestmark = pytest.mark.skipif(not pqc.PQC_AVAILABLE, reason=pqc.PQC_ERROR)
@@ -170,3 +171,17 @@ def test_sizes_match_the_published_table(tmp_path):
     assert len(signer.keys.ed_pub) == 32
     sig = signer.sign_checkpoint({"a": 1})[1]
     assert len(base64.b64decode(sig)) == 3309
+
+
+def test_engine_refuses_a_forged_signature(tmp_path):
+    led, signer = make_ledger(tmp_path)
+    Engine(str(tmp_path), signer=signer)
+    path = led.path
+    records = Ledger(path).all()
+    raw = list(base64.b64decode(records[3]["sig"]))
+    raw[5] ^= 0x01
+    records[3]["sig"] = base64.b64encode(bytes(raw)).decode()
+    rewrite(path, rehash(records))
+    with pytest.raises(LedgerIntegrityError) as exc:
+        Engine(str(tmp_path), signer=signer)
+    assert "signatures do not verify" in str(exc.value)

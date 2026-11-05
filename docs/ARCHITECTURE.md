@@ -38,7 +38,7 @@ a schema registry.
 {
   "seq": 3826,
   "sealed_at": "2026-11-02T00:12:44.118Z",
-  "decision": "PENDING_APPROVAL",
+  "decision": "ASSESSED",
   "subject": "psn_5b7def8245d19838eb6c1249",
   "person_id": "SEL-03827",
   "tier": "HIGH",
@@ -106,19 +106,19 @@ that does not follow this graph.
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 205 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 238 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
-| `sel/engine.py` | state machine, replay, equity, queue | 285 |
-| `sel/verify.py` | CLI verifier, both layers | 101 |
+| `sel/engine.py` | state machine, replay, equity, queue | 317 |
+| `sel/verify.py` | CLI verifier, both layers | 104 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 248 |
+| `server.py` | stdlib HTTP API and static host | 271 |
 | `web/index.html` | demo interface | 237 |
-| `tests/test_core.py` | 18 core unit tests | 203 |
-| `tests/test_hybrid.py` | 12 hybrid profile tests | 172 |
+| `tests/test_core.py` | 24 core unit tests | 275 |
+| `tests/test_hybrid.py` | 13 hybrid profile tests | 187 |
 
 ## Verification
 

@@ -15,7 +15,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from sel.engine import Engine, LedgerIntegrityError   # noqa: E402
+from sel.engine import Engine, LedgerIntegrityError, UnknownPerson   # noqa: E402
 from sel import tamper as tamper_mod   # noqa: E402
 from sel.ledger import Ledger          # noqa: E402
 
@@ -72,11 +72,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/queue":
             try:
                 limit = int(q.get("limit", ["150"])[0])
+                offset = int(q.get("offset", ["0"])[0])
             except (TypeError, ValueError):
-                return self._send(400, {"error": "limit must be an integer"})
+                return self._send(400, {"error": "limit and offset must be integers"})
             if not 1 <= limit <= 500:
                 return self._send(400, {"error": "limit must be between 1 and 500"})
-            return self._send(200, {"queue": ENGINE.queue(limit)})
+            if offset < 0:
+                return self._send(400, {"error": "offset must not be negative"})
+            rows = ENGINE.queue(limit, offset)
+            total = len(ENGINE.queue(len(ENGINE.cohort)))
+            return self._send(200, {"queue": rows, "total": total,
+                                    "limit": limit, "offset": offset})
         if path == "/api/equity":
             return self._send(200, ENGINE.equity())
         if path == "/api/verify":
@@ -90,8 +96,10 @@ class Handler(BaseHTTPRequestHandler):
             pid = unquote(path[len("/api/person/"):])
             try:
                 return self._send(200, ENGINE.person_view(pid))
-            except KeyError:
+            except UnknownPerson:
                 return self._send(404, {"error": "no such person"})
+            except KeyError:
+                return self._send(500, {"error": "person record is incomplete"})
         if path == "/api/export/cohort":
             return self._export_cohort()
         if path == "/api/export":
@@ -100,8 +108,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "missing required field"})
             try:
                 return self._export_person(pid)
-            except KeyError:
+            except UnknownPerson:
                 return self._send(404, {"error": "no such person"})
+            except KeyError:
+                return self._send(500, {"error": "person record is incomplete"})
 
         return self._send(404, {"error": "not found"})
 
@@ -115,33 +125,37 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._send(400, {"error": "body must be a JSON object"})
 
+        person_id = body.get("person_id")
+        if person_id is not None and not isinstance(person_id, str):
+            return self._send(400, {"error": "person_id must be a string"})
+
         if u.path == "/api/approve":
-            if not body.get("person_id"):
+            if not person_id:
                 return self._send(400, {"error": "person_id required"})
             try:
-                rec = ENGINE.approve(body["person_id"], body.get("approver_id", "clinician"),
+                rec = ENGINE.approve(person_id, body.get("approver_id", "clinician"),
                                      body.get("role", "clinician"), body.get("note", ""))
-            except KeyError:
+            except UnknownPerson:
                 return self._send(404, {"error": "no such person"})
             except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
             return self._send(200, {"sealed": rec})
         if u.path == "/api/release":
-            if not body.get("person_id"):
+            if not person_id:
                 return self._send(400, {"error": "person_id required"})
             try:
-                rec = ENGINE.release(body["person_id"], body.get("released_by", "clinician"))
-            except KeyError:
+                rec = ENGINE.release(person_id, body.get("released_by", "clinician"))
+            except UnknownPerson:
                 return self._send(404, {"error": "no such person"})
             except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
             return self._send(200, {"sealed": rec})
         if u.path == "/api/outcome":
-            if not body.get("person_id") or not body.get("outcome"):
+            if not person_id or not body.get("outcome"):
                 return self._send(400, {"error": "person_id and outcome required"})
             try:
-                rec = ENGINE.record_outcome(body["person_id"], body["outcome"])
-            except KeyError:
+                rec = ENGINE.record_outcome(person_id, body["outcome"])
+            except UnknownPerson:
                 return self._send(404, {"error": "no such person"})
             except ValueError as exc:
                 return self._send(409, {"error": str(exc)})
@@ -152,6 +166,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "seq must be a non-negative integer"})
             if seq is not None and seq >= len(ENGINE.ledger):
                 return self._send(400, {"error": "seq out of range"})
+            target = seq if seq is not None else self._first_tier_seq()
+            if target is not None and "tier" not in ENGINE.ledger.all()[target]:
+                return self._send(400, {"error": "chosen record has no tier field to tamper"})
             return self._tamper(seq)
         if u.path == "/api/reset":
             return self._send(403, {"error": "reset disabled: the record is append-only by design"})
@@ -168,6 +185,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         with open(path, "rb") as fh:
             return self._send(200, fh.read(), ctype)
+
+    def _first_tier_seq(self):
+        for i, rec in enumerate(ENGINE.ledger.all()):
+            if "tier" in rec:
+                return i
+        return None
 
     def _tamper(self, seq):
         src = os.path.join(DATA, "ledger.jsonl")

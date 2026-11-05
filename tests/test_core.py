@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from sel import cohort, risk
-from sel.engine import Engine, LedgerIntegrityError
+from sel.engine import Engine, LedgerIntegrityError, UnknownPerson
 from sel.ledger import Ledger, LedgerFormatError
 from sel.tamper import tamper
 
@@ -107,7 +107,7 @@ class TestLedger(unittest.TestCase):
         payloads = [
             "[]\n",
             '{"seq": 0}\n',
-            '{"seq": 0, "hash": "%s", "prev_hash": "%s", "kind": "CHECKPOINT", "to_seq": "bad"}\n'
+            '{"seq": 0, "hash": "%s", "prev_hash": "%s", "kind": "CHECKPOINT", "from_seq": 0, "to_seq": "bad"}\n'
             % ("a" * 64, "0" * 64),
         ]
         for i, payload in enumerate(payloads):
@@ -116,6 +116,38 @@ class TestLedger(unittest.TestCase):
                 fh.write(payload)
             with self.assertRaises(LedgerFormatError):
                 Ledger(path)
+
+    def test_key_record_public_key_must_be_hex(self):
+        path = os.path.join(self.dir, "key.jsonl")
+        with open(path, "w") as fh:
+            fh.write(json.dumps({
+                "seq": 0, "hash": "a" * 64, "prev_hash": "0" * 64,
+                "kind": "KEY", "ed25519_pub": [], "mldsa65_pub": "ab",
+            }) + "\n")
+        with self.assertRaises(LedgerFormatError):
+            Ledger(path)
+
+    def test_non_finite_number_is_a_format_error(self):
+        path = os.path.join(self.dir, "nan.jsonl")
+        with open(path, "w") as fh:
+            fh.write('{"seq": 0, "hash": "%s", "prev_hash": "%s", "score": NaN}\n'
+                     % ("a" * 64, "0" * 64))
+        with self.assertRaises(LedgerFormatError):
+            Ledger(path)
+
+    def test_format_error_reports_a_line_not_a_sequence(self):
+        import contextlib
+        import io
+        from sel.verify import main as verify_main
+        path = os.path.join(self.dir, "trunc.jsonl")
+        with open(path, "w") as fh:
+            fh.write('{"seq": 0, "hash": "abc')
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(verify_main(["--ledger", path, "--json"]), 1)
+        result = json.loads(buf.getvalue())
+        self.assertIsNone(result["first_bad_seq"])
+        self.assertEqual(result["line"], 1)
 
     def test_tail_truncation_needs_a_pinned_head(self):
         import contextlib
@@ -189,6 +221,46 @@ class TestEngine(unittest.TestCase):
         pid = self.engine.queue(1)[0]["person_id"]
         with self.assertRaises(ValueError):
             self.engine.release(pid, "dr.test")
+
+    def test_unknown_person_is_its_own_error(self):
+        self.engine.run_cycle()
+        with self.assertRaises(UnknownPerson):
+            self.engine.approve("SEL-99999", "dr.test", "clinician")
+        with self.assertRaises(UnknownPerson):
+            self.engine.record_outcome("SEL-99999", "booked")
+        with self.assertRaises(UnknownPerson):
+            self.engine.person_view(42)
+
+    def test_queue_offset_reaches_past_the_page_cap(self):
+        self.engine.run_cycle()
+        total = len(self.engine.queue(len(self.engine.cohort)))
+        self.assertGreater(total, 500)
+        first = self.engine.queue(500, 0)
+        rest = self.engine.queue(500, 500)
+        self.assertEqual(len(first), 500)
+        self.assertEqual(len(rest), total - 500)
+        self.assertFalse({r["person_id"] for r in first} & {r["person_id"] for r in rest})
+
+    def test_interrupted_cycle_resumes_without_double_assessing(self):
+        self.engine.run_cycle()
+        baseline_queue = len(self.engine.queue(len(self.engine.cohort)))
+        path = os.path.join(self.engine.data_dir, "ledger.jsonl")
+        with open(path) as fh:
+            rows = fh.readlines()
+        keep = [r for r in rows[:2000]]
+        with open(path, "w") as fh:
+            fh.writelines(keep)
+        resumed = Engine(self.engine.data_dir)
+        self.assertLess(len(resumed.summary()["counts"]), len(resumed.cohort))
+        result = resumed.run_cycle()
+        self.assertFalse(result["skipped"], result)
+        assessed = [r for r in resumed.ledger.all()
+                    if r.get("decision") in ("ASSESSED", "NO_ACTION", "CONSENT_BLOCKED")]
+        ids = [r.get("person_id") for r in assessed]
+        self.assertEqual(len(ids), len(resumed.cohort))
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(len(resumed.queue(len(resumed.cohort))), baseline_queue)
+        self.assertTrue(resumed.ledger.verify()[0])
 
     def test_replay_after_restart_matches(self):
         self.engine.run_cycle()

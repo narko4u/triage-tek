@@ -46,16 +46,16 @@ Three properties matter to a reviewer:
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 205 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 238 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
-| `sel/engine.py` | state machine, replay, queue, equity | 285 |
-| `sel/verify.py` | CLI verifier, both layers | 101 |
+| `sel/engine.py` | state machine, replay, queue, equity | 317 |
+| `sel/verify.py` | CLI verifier, both layers | 104 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and signing benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness, operates on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 248 |
+| `server.py` | stdlib HTTP API and static host | 271 |
 | `web/index.html` | demo interface | 237 |
 
 ## 3. Record model
@@ -68,7 +68,7 @@ same way on any machine and in any language without a schema registry.
   "seq": 3826,
   "sealed_at": "2026-11-02T00:12:44.118Z",
   "prev_hash": "a7b2f979e9f8dd97f513c5123eb94a25b5e0b02f...",
-  "decision": "PENDING_APPROVAL",
+  "decision": "ASSESSED",
   "subject": "psn_5b7def8245d19838eb6c1249",
   "person_id": "SEL-03827",
   "tier": "HIGH",
@@ -121,6 +121,18 @@ HIGH tier: score 6 or more. MODERATE: 4 to 5. LOW: below 4.
 Terminal states are `NO_ACTION`, `CONSENT_BLOCKED` and `OUTCOME`. Any transition not on this
 graph raises, and the refusal path is itself a sealed record, so the absence of an action is
 provable after the fact.
+
+Two operational guards exist because a record store is only worth what survives a restart.
+
+**Startup is fail-closed.** `Engine()` replays and verifies the ledger before it exposes a single
+method. A broken chain raises `LedgerIntegrityError` and the process exits. When a KEY record is
+present it also verifies both signature halves, so a ledger whose Ed25519 or ML-DSA material does
+not check out cannot be replayed into an approval either.
+
+**A cycle is complete only when every cohort member has an assessment record.** Completion is
+derived from the ledger, not from a flag beside it. If the process dies part way through, the next
+start resumes: people already sealed are skipped, the rest are assessed, and only the people left
+at `ASSESSED` enter the approval queue. Nobody is assessed twice and no queue entry is duplicated.
 
 ## 5. Scoring model
 
@@ -204,7 +216,7 @@ verifier prints the key on every run for exactly that purpose.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/summary` | counts, chain status, head hash |
-| GET | `/api/queue` | approval queue, ordered by score |
+| GET | `/api/queue?limit=&offset=` | approval queue, ordered by score, paged |
 | GET | `/api/equity` | selection and reach rates by age, sex, decile |
 | GET | `/api/verify` | chain and signature status |
 | GET | `/api/export?person=` | per-person audit pack |
@@ -215,12 +227,17 @@ verifier prints the key on every run for exactly that purpose.
 | POST | `/api/tamper` | tamper harness on a copy |
 | POST | `/api/reset` | regenerate the demo ledger |
 
+Request errors are typed rather than generic: a missing field or an object where an id belongs is
+`400`, a person that does not exist is `404`, and a state transition the machine does not allow is
+`409`. The engine raises `UnknownPerson` for the second case so a bad id is never reported as a
+malformed request.
+
 No authentication in the demo. Production substitutes the hospital identity provider at the
 approval step, which is why the actor is a field in the record rather than a session detail.
 
 ## 9. Tests and CI
 
-30 tests, 18 core and 12 hybrid. The core tests are `unittest` (no third-party dependency),
+37 tests, 24 core and 13 hybrid. The core tests are `unittest` (no third-party dependency),
 the hybrid tests are `pytest`. CI runs two jobs on Python 3.12: a stdlib job that seals, verifies
 and tampers, and a hybrid job that installs the pinned extra and repeats seal, verify, tamper,
 forge and the signing benchmark.
@@ -233,7 +250,10 @@ forge and the signing benchmark.
 | Truncation | a dropped tail verifies alone and fails against the pinned head |
 | Corrupt file | a truncated, non-UTF-8 or non-record line is a format error with its line number |
 | Missing file | a path that does not exist exits 1 instead of reporting an empty ledger |
-| Startup | a damaged ledger is refused before any further approval can be sealed |
+| Startup | a damaged chain, a forged signature or a bad KEY record is refused before any approval can be sealed |
+| Resume | an interrupted cycle is resumed from the sealed assessments, with no person assessed twice |
+| Requests | object person ids are a 400, an unknown person is a 404, a missing tier target is a 400 |
+| Paging | the queue is reachable past the 500-row page cap with `offset` |
 | Consent | approval is refused without outreach consent, at engine level |
 | Replay | state rebuilt from the ledger matches live state |
 | Risk | reasons sum to the score, thresholds applied as published |
@@ -252,7 +272,7 @@ forge and the signing benchmark.
 | Hybrid verification | both halves verify across 5,841 records in 25 checkpoints |
 | Tamper test | edit record 2, `BROKEN at seq 2`, live ledger intact |
 | Forgery | chain `OK`, signatures `FAILED at seq 0` |
-| Tests | 30 passed |
+| Tests | 37 passed |
 
 Regenerate every line with the commands below. Nothing in this table is an estimate.
 
@@ -283,7 +303,7 @@ Regenerate every line with the commands below. Nothing in this table is an estim
 
 ```bash
 git clone https://github.com/narko4u/triage-tek && cd triage-tek
-python3 -m unittest discover -s tests -p "test_core.py" -v   # 18 core tests
+python3 -m unittest discover -s tests -p "test_core.py" -v   # 24 core tests
 python3 server.py --port 8795                    # first run generates data/ and runs a cycle
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only --expect-head <hash from a trusted transcript>

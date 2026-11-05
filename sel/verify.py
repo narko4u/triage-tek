@@ -31,6 +31,7 @@ def main(argv=None):
             "records": None,
             "head": None,
             "first_bad_seq": None,
+            "line": None,
             "detail": "ledger not found: %s" % args.ledger,
             "signatures": None,
         }
@@ -47,7 +48,8 @@ def main(argv=None):
             "ok": False,
             "records": None,
             "head": None,
-            "first_bad_seq": exc.line,
+            "first_bad_seq": None,
+            "line": exc.line,
             "detail": str(exc),
             "signatures": None,
         }
@@ -66,6 +68,7 @@ def main(argv=None):
         "records": len(led),
         "head": led.head,
         "first_bad_seq": bad,
+        "line": None,
         "detail": detail,
         "signatures": None,
     }

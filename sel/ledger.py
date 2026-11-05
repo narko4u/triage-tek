@@ -7,6 +7,7 @@ attacker with write access to the file can rewrite the whole chain from the
 tamper point onwards. See docs/LIMITATIONS.md, which says so plainly.
 """
 import json
+import math
 import os
 import threading
 from datetime import datetime, timezone
@@ -32,6 +33,19 @@ class LedgerFormatError(ValueError):
 def utc_now():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+
+def _reject_nonfinite(value, lineno, path="record"):
+    """JSON allows NaN and Infinity by default; evidence does not."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise LedgerFormatError(
+            "line %d has a non-finite number at %s" % (lineno, path), lineno
+        )
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _reject_nonfinite(item, lineno, "%s.%s" % (path, key))
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            _reject_nonfinite(item, lineno, "%s[%d]" % (path, i))
 
 class Ledger:
     def __init__(self, path, signer=None):
@@ -86,6 +100,25 @@ class Ledger:
                     raise LedgerFormatError(
                         "line %d checkpoint has no valid %s" % (lineno, field), lineno
                     )
+            if rec["from_seq"] < 0 or rec["to_seq"] < rec["from_seq"]:
+                raise LedgerFormatError(
+                    "line %d checkpoint range is inverted" % lineno, lineno
+                )
+        if rec.get("kind") == pqc.KIND_KEY:
+            for field in ("ed25519_pub", "mldsa65_pub"):
+                value = rec.get(field)
+                if not isinstance(value, str) or not value:
+                    raise LedgerFormatError(
+                        "line %d key record has no valid %s" % (lineno, field), lineno
+                    )
+            try:
+                bytes.fromhex(rec["ed25519_pub"])
+            except ValueError:
+                raise LedgerFormatError(
+                    "line %d key record public key is not hex" % lineno, lineno
+                ) from None
+        _reject_nonfinite(rec, lineno)
+
 
     # ---- reading -------------------------------------------------------
     def __len__(self):

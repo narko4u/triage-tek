@@ -30,6 +30,10 @@ class LedgerIntegrityError(RuntimeError):
     """The ledger on disk does not verify, so the engine must not act on it."""
 
 
+class UnknownPerson(KeyError):
+    """The person id is not in the cohort. Distinct from a bad request."""
+
+
 class Engine:
     def __init__(self, data_dir, signer=None):
         self.data_dir = data_dir
@@ -43,6 +47,13 @@ class Engine:
             raise LedgerIntegrityError(
                 "refusing to act on a ledger that does not verify: %s at seq %s" % (detail, bad)
             )
+        if any(r.get("kind") == "KEY" for r in self.ledger.all()):
+            sig = self.ledger.verify_signatures()
+            if not sig["ok"]:
+                raise LedgerIntegrityError(
+                    "refusing to act on a ledger whose signatures do not verify: %s"
+                    % sig["detail"]
+                )
         self._lock = threading.RLock()
         self.cohort = self._load_cohort()
         self.by_id = {p["person_id"]: p for p in self.cohort}
@@ -75,12 +86,27 @@ class Engine:
 
     # ---- cycle ---------------------------------------------------------
     def run_cycle(self):
-        """Assess the whole cohort and seal one record per person."""
+        """Assess the whole cohort and seal one record per person.
+
+        Completion is derived from the ledger: every cohort member carries an
+        assessment record. A cycle interrupted part way through is resumed, not
+        mistaken for a finished one, and people already assessed are not
+        assessed twice.
+        """
         with self._lock:
-            if any(r.get("decision") for r in self.ledger.all()):
-                return {"skipped": True, "reason": "ledger already contains a cycle"}
+            done = {
+                entry.get("person_id")
+                for entry in self.state.values()
+                if entry.get("status")
+            }
+            if len(done) >= len(self.cohort):
+                return {"skipped": True, "reason": "cycle already complete"}
             seq_of = {}
             for person in self.cohort:
+                if person["person_id"] in done:
+                    subj = cohort_mod.pseudonym(person["person_id"])
+                    seq_of[person["person_id"]] = self.state[subj]["records"][0]
+                    continue
                 assessment = risk_mod.assess(person)
                 subj = cohort_mod.pseudonym(person["person_id"])
                 decision = "ASSESSED"
@@ -119,6 +145,9 @@ class Engine:
             # anyone who cleared consent and is above threshold is queued for a human
             queued = 0
             for person in self.cohort:
+                subj = cohort_mod.pseudonym(person["person_id"])
+                if self.state.get(subj, {}).get("status") not in (None, "ASSESSED"):
+                    continue
                 assessment = risk_mod.assess(person)
                 if assessment["tier"] == "LOW":
                     continue
@@ -151,9 +180,11 @@ class Engine:
 
     # ---- transitions ---------------------------------------------------
     def _person(self, person_id):
+        if not isinstance(person_id, str):
+            raise UnknownPerson(person_id)
         person = self.by_id.get(person_id)
         if not person:
-            raise KeyError(person_id)
+            raise UnknownPerson(person_id)
         return person
 
     def approve(self, person_id, approver_id, approver_role, note=""):
@@ -197,6 +228,7 @@ class Engine:
         with self._lock:
             if outcome not in ("booked", "declined", "no_response"):
                 raise ValueError("unknown outcome")
+            self._person(person_id)
             subj = cohort_mod.pseudonym(person_id)
             if self.state.get(subj, {}).get("status") != "OUTREACH_RELEASED":
                 raise ValueError("outreach not released")
@@ -224,7 +256,7 @@ class Engine:
             "chain": [self.ledger.all()[i] for i in self.state.get(subj, {}).get("records", [])],
         }
 
-    def queue(self, limit=200):
+    def queue(self, limit=200, offset=0):
         out = []
         for subj, entry in self.state.items():
             if entry.get("status") in ("PENDING_APPROVAL", "APPROVED"):
@@ -243,7 +275,7 @@ class Engine:
                     "sex": person["sex"],
                 })
         out.sort(key=lambda r: (-r["score"], r["person_id"]))
-        return out[:limit]
+        return out[offset:offset + limit]
 
     def summary(self):
         counts = {}
