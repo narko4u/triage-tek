@@ -5,7 +5,7 @@ import unittest
 
 from sel import cohort, risk
 from sel.engine import Engine
-from sel.ledger import Ledger
+from sel.ledger import Ledger, LedgerFormatError
 from sel.tamper import tamper
 
 
@@ -84,6 +84,39 @@ class TestLedger(unittest.TestCase):
         ok, bad, _ = Ledger(self.path).verify()
         self.assertFalse(ok)
         self.assertEqual(bad, 1)
+
+    def test_truncated_line_is_a_format_error(self):
+        led = Ledger(self.path)
+        for i in range(3):
+            led.append(decision="ASSESSED", subject="psn_%d" % i)
+        raw = open(self.path, "rb").read()
+        open(self.path, "wb").write(raw[:-25])
+        with self.assertRaises(LedgerFormatError) as ctx:
+            Ledger(self.path)
+        self.assertEqual(ctx.exception.line, 3)
+
+    def test_tail_truncation_needs_a_pinned_head(self):
+        import contextlib
+        import io
+        from sel.verify import main as verify_main
+        led = Ledger(self.path)
+        for i in range(4):
+            led.append(decision="ASSESSED", subject="psn_%d" % i)
+        head = led.head
+        with open(self.path) as fh:
+            rows = fh.readlines()
+        with open(self.path, "w") as fh:
+            fh.writelines(rows[:-1])
+        # the shortened chain is internally consistent, which is exactly why a
+        # pinned head is required to catch a dropped tail
+        ok, _, _ = Ledger(self.path).verify()
+        self.assertTrue(ok)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(verify_main(["--ledger", self.path, "--chain-only"]), 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                verify_main(["--ledger", self.path, "--chain-only", "--expect-head", head]), 1
+            )
 
 
 class TestEngine(unittest.TestCase):

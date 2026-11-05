@@ -106,18 +106,18 @@ that does not follow this graph.
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 157 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 182 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
 | `sel/engine.py` | state machine, replay, equity, queue | 276 |
-| `sel/verify.py` | CLI verifier, both layers | 62 |
+| `sel/verify.py` | CLI verifier, both layers | 85 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 207 |
+| `server.py` | stdlib HTTP API and static host | 217 |
 | `web/index.html` | demo interface | 237 |
-| `tests/test_core.py` | 13 core unit tests | 136 |
+| `tests/test_core.py` | 15 core unit tests | 169 |
 | `tests/test_hybrid.py` | 12 hybrid profile tests | 172 |
 
 ## Verification

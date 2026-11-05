@@ -46,16 +46,16 @@ Three properties matter to a reviewer:
 | File | Responsibility | Lines |
 |---|---|---|
 | `sel/canonical.py` | deterministic JSON and sha256 | 16 |
-| `sel/ledger.py` | append, verify, head, checkpoints | 157 |
+| `sel/ledger.py` | append, verify, head, checkpoints | 182 |
 | `sel/cohort.py` | seeded synthetic cohort, pseudonyms | 55 |
 | `sel/risk.py` | transparent points model | 64 |
 | `sel/engine.py` | state machine, replay, queue, equity | 276 |
-| `sel/verify.py` | CLI verifier, both layers | 62 |
+| `sel/verify.py` | CLI verifier, both layers | 85 |
 | `sel/pqc.py` | hybrid signing and verification | 323 |
 | `sel/hybrid.py` | hybrid runner and signing benchmark | 120 |
 | `sel/forge.py` | signature-stripping forgery | 59 |
 | `sel/tamper.py` | tamper harness, operates on a copy | 63 |
-| `server.py` | stdlib HTTP API and static host | 214 |
+| `server.py` | stdlib HTTP API and static host | 217 |
 | `web/index.html` | demo interface | 237 |
 
 ## 3. Record model
@@ -153,6 +153,14 @@ and 4 for MODERATE, both written into the record.
 It returns the **first failing index and a reason** (content mismatch, broken link, out of
 order), not a boolean. An auditor needs localisation, not a verdict.
 
+A line that is not valid JSON or not valid UTF-8 is a **format error**, reported with its line
+number, rather than a shorter chain that still verifies.
+
+A dropped tail is a different case. Removing the last records leaves a chain that is internally
+consistent, so on its own it verifies clean. `--expect-head` takes the head hash pinned out of
+band and fails when the file stops short of it. Verify without a pinned head catches edits,
+insertions and deletions in the middle; it catches a dropped tail only against the pinned head.
+
 `verify_signatures()` then checks both halves and reports which one failed:
 
 - Ed25519 signature on every record.
@@ -172,13 +180,19 @@ Two levels, because per-record ML-DSA is honest but slow.
 | Every 250 records | ML-DSA-65 (FIPS 204) | Merkle root over the segment | 3,309 B | 10.17 ms | 0.18 ms |
 
 5,841 signed records are covered by 25 checkpoints: one at the start and one every 250 records
-after it. That is 0.2 s of post-quantum signing instead of 51 s, with every record inheriting
-the guarantee through the Merkle root. The suite is declared per record
-(`hybrid-ed25519-mldsa65-v1`), so a future algorithm can be added without re-cutting the chain.
+after it. That is 25 ML-DSA-65 signatures, not 5,841. The timing above is Ed25519 per record
+plus 25 post-quantum signings amortised across the cycle, which is 0.2 s of post-quantum
+signing instead of 51 s, with every record inheriting the guarantee through the Merkle root.
+The suite is declared per record (`hybrid-ed25519-mldsa65-v1`), so a future algorithm can be
+added without re-cutting the chain.
 
 `sel/forge.py` implements the attack the signature layer exists to stop: strip every signature,
 recompute every hash. The result re-hashes from genesis and the chain reports `OK`, then
 `verify_signatures()` fails at `seq 0` because the attacker holds no key.
+
+The reverse attack is covered as well: `test_tampered_mldsa_checkpoint_is_caught` corrupts only
+the ML-DSA half of a checkpoint, leaves Ed25519 intact, and verification reports
+`ml-dsa half failed`. Both halves are load-bearing, not one plus a decoration.
 
 The KEY record inside the ledger is self-signed. On its own it proves only that the file is
 internally consistent. Trust beyond that requires pinning the fingerprint out of band, and the
@@ -205,7 +219,7 @@ approval step, which is why the actor is a field in the record rather than a ses
 
 ## 9. Tests and CI
 
-25 tests, 13 core and 12 hybrid. The core tests are `unittest` (no third-party dependency),
+27 tests, 15 core and 12 hybrid. The core tests are `unittest` (no third-party dependency),
 the hybrid tests are `pytest`. CI runs two jobs on Python 3.12: a stdlib job that seals, verifies
 and tampers, and a hybrid job that installs the pinned extra and repeats seal, verify, tamper,
 forge and the signing benchmark.
@@ -215,6 +229,8 @@ forge and the signing benchmark.
 | Canonical form | key order and whitespace cannot change the digest |
 | Ledger | append, head, dense sequence, link integrity |
 | Tamper | an edited field fails at that record, with the right index |
+| Truncation | a dropped tail verifies alone and fails against the pinned head |
+| Corrupt file | a truncated or non-UTF-8 line is a format error with its line number |
 | Consent | approval is refused without outreach consent, at engine level |
 | Replay | state rebuilt from the ledger matches live state |
 | Risk | reasons sum to the score, thresholds applied as published |
@@ -233,7 +249,7 @@ forge and the signing benchmark.
 | Hybrid verification | both halves verify across 5,841 records in 25 checkpoints |
 | Tamper test | edit record 2, `BROKEN at seq 2`, live ledger intact |
 | Forgery | chain `OK`, signatures `FAILED at seq 0` |
-| Tests | 25 passed |
+| Tests | 27 passed |
 
 Regenerate every line with the commands below. Nothing in this table is an estimate.
 
@@ -244,6 +260,9 @@ Regenerate every line with the commands below. Nothing in this table is an estim
 - Signing moves the trust question to **key custody**. Self-signed keys prove internal
   consistency, not identity. Pin the fingerprint out of band.
 - **Single writer** assumed. Concurrent writers need a sequencer or a log service.
+- **A dropped tail is invisible without a pinned head.** Deleting the newest records leaves a
+  shorter chain that is internally consistent. Pass `--expect-head` with the head recorded out
+  of band, or anchor the head, and the truncation is caught.
 - **No revocation path** yet. A compromised key cannot be retired in place.
 - The model is **illustrative and uncalibrated**, with no clinical validation and no outcome
   claim. The cohort is synthetic.
@@ -254,14 +273,15 @@ Regenerate every line with the commands below. Nothing in this table is an estim
 
 ```bash
 git clone https://github.com/narko4u/triage-tek && cd triage-tek
-python3 -m unittest discover -s tests -p "test_core.py" -v   # 13 core tests
+python3 -m unittest discover -s tests -p "test_core.py" -v   # 15 core tests
 python3 server.py --port 8795                    # first run generates data/ and runs a cycle
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only
+python3 -m sel.verify --ledger data/ledger.jsonl --chain-only --expect-head <hash from a trusted transcript>
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 python3 -m sel.verify --ledger data/tampered.jsonl --chain-only   # exits 1, names the record
 
 pip install -r requirements-pqc.txt
-python3 -m pytest tests -q                       # 25 passed
+python3 -m pytest tests -q                       # 27 passed
 python3 -m sel.hybrid --data-dir data-hybrid --fresh
 python3 -m sel.verify --ledger data-hybrid/ledger.jsonl
 

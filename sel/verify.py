@@ -9,7 +9,7 @@ import argparse
 import json
 import sys
 
-from .ledger import Ledger
+from .ledger import Ledger, LedgerFormatError
 
 
 def main(argv=None):
@@ -17,13 +17,34 @@ def main(argv=None):
     ap.add_argument("--ledger", default="data/ledger.jsonl")
     ap.add_argument("--fingerprint", default=None,
                     help="pin the signing key fingerprint expected in the KEY record")
+    ap.add_argument("--expect-head", default=None,
+                    help="pin the head hash out of band; catches truncation of the tail")
     ap.add_argument("--chain-only", action="store_true",
                     help="verify the hash chain and skip the signature layer")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    led = Ledger(args.ledger)
+    try:
+        led = Ledger(args.ledger)
+    except LedgerFormatError as exc:
+        result = {
+            "ok": False,
+            "records": None,
+            "head": None,
+            "first_bad_seq": exc.line,
+            "detail": str(exc),
+            "signatures": None,
+        }
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("chain   : BROKEN -", exc)
+        return 1
+
     ok, bad, detail = led.verify()
+    if ok and args.expect_head and led.head != args.expect_head:
+        ok, bad = False, None
+        detail = "head %s does not match the pinned head %s" % (led.head, args.expect_head)
     result = {
         "ok": ok,
         "records": len(led),
@@ -44,6 +65,8 @@ def main(argv=None):
         print("head    :", led.head)
         if ok:
             print("chain   : OK -", detail)
+        elif bad is None:
+            print("chain   : BROKEN -", detail)
         else:
             print("chain   : BROKEN at seq", bad, "-", detail)
         sig = result["signatures"]

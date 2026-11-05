@@ -23,12 +23,15 @@ claim.
 ## Integrity
 
 - **Tamper-evident, not tamper-proof, in the default profile.** Each record hashes its own
-  content plus the previous record's hash. That detects edits, insertions and deletions, and
-  localises them. It does not prevent someone with write access from recomputing the chain
-  from the edit point forward. The mitigation is publication: send the head hash somewhere the
-  writer does not control (a timestamping authority, a second custodian, or a public chain).
-  The prototype exposes the head hash so that anchoring can be added without changing the
-  record format.
+  content plus the previous record's hash. That detects edits, insertions and deletions in the
+  middle of the chain, and localises them. It does not detect a dropped tail on its own, because
+  the shortened chain is internally consistent; pass `--expect-head` with the head recorded
+  elsewhere, or anchor the head, to catch that. It also does not prevent someone with write
+  access from recomputing the chain from the edit point forward. The mitigation is publication:
+  send the head hash somewhere the writer does not control (a timestamping authority, a second
+  custodian, or a public chain). The prototype exposes the head hash so that anchoring can be
+  added without changing the record format. A file that is not valid JSON or not valid UTF-8 is
+  rejected with a line number rather than read as a shorter chain.
 - **The hybrid profile moves the problem to key custody, it does not delete it.** With
   Ed25519 and ML-DSA-65 signatures, a rewrite needs the private keys, not just write access.
   Whoever holds those keys can still sign a false history. Key custody, rotation and

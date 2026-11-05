@@ -131,7 +131,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- payloads ------------------------------------------------------
     def _static(self, name, ctype):
-        path = os.path.join(WEB, name)
+        root = os.path.realpath(WEB)
+        path = os.path.realpath(os.path.join(root, name))
+        if path != root and not path.startswith(root + os.sep):
+            return self._send(404, {"error": "not found"})
         if not os.path.isfile(path):
             return self._send(404, {"error": "not found"})
         with open(path, "rb") as fh:
