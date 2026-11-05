@@ -26,7 +26,7 @@ impact is on completion rates and on the ability to run a programme that survive
   signature stripped and every hash recomputed, and the verifier refuses it.
 - Zero runtime dependencies in the default profile; stdlib HTTP server; the whole system runs
   offline. The signing extra is opt-in.
-- 25 tests: 13 core covering chain integrity, tamper localisation, deletion detection, consent
+- 27 tests: 15 core covering chain integrity, tamper localisation, deletion and truncation detection, consent
   refusal, transition ordering and replay, plus 12 for the hybrid profile including a
   signature-stripping forgery.
 

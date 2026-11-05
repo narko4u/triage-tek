@@ -17,6 +17,18 @@ from .canonical import digest, dumps
 GENESIS = "0" * 64
 
 
+class LedgerFormatError(ValueError):
+    """The file on disk is not a ledger this reader can verify.
+
+    Raised with the line number so a corrupt or truncated file fails loudly
+    instead of being read as a shorter, still-valid chain.
+    """
+
+    def __init__(self, message, line=None):
+        super().__init__(message)
+        self.line = line
+
+
 def utc_now():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -30,11 +42,24 @@ class Ledger:
         self._covered_to = -1
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if line:
-                        self._records.append(json.loads(line))
+            with open(path, "rb") as fh:
+                raw = fh.read()
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise LedgerFormatError(
+                    "the ledger is not valid UTF-8: %s" % exc
+                ) from exc
+            for lineno, line in enumerate(text.splitlines(), 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    self._records.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    raise LedgerFormatError(
+                        "line %d is not valid JSON: %s" % (lineno, exc.msg), lineno
+                    ) from exc
         for rec in self._records:
             if rec.get("kind") == pqc.KIND_CHECKPOINT:
                 self._covered_to = max(self._covered_to, int(rec.get("to_seq", -1)))
