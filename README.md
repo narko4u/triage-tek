@@ -49,6 +49,7 @@ SEL_DATA=data-hybrid SEL_HYBRID=1 python3 server.py --port 8795   # /api/verify 
 ```
 
 Design, threat model and the published signing benchmark: [docs/HYBRID-PQC.md](docs/HYBRID-PQC.md).
+How it is built, for engineers: [docs/TECHNICAL-ANNEX.md](docs/TECHNICAL-ANNEX.md).
 
 ## Quick start
 
@@ -63,9 +64,9 @@ The hybrid profile adds one optional extra, listed in `requirements-pqc.txt`.
 
 ```bash
 python3 -m pytest tests -q                    # 25 tests with the extra, 13 without
-python3 -m sel.verify --ledger data/ledger.jsonl
+python3 -m sel.verify --ledger data/ledger.jsonl --chain-only   # default profile is unsigned
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
-python3 -m sel.verify --ledger data/tampered.jsonl   # exits 1, names the bad record
+python3 -m sel.verify --ledger data/tampered.jsonl --chain-only # exits 1, names the bad record
 ```
 
 ## What it does
