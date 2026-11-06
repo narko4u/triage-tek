@@ -4,6 +4,8 @@
 
 **Screening evidence infrastructure for population health programmes.**
 
+Live demo: **https://triage-tek.empirelabs.com.au** (synthetic data, resets every 30 minutes).
+
 TriageTek is a working prototype for the **Future Health Digital Innovation Challenge** (Challenge 04,
 Precision Prevention and Screening), GITEX Dubai 2026.
 
