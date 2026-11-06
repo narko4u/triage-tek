@@ -37,7 +37,7 @@ verifying after the classical algorithms are retired.
 | Hybrid verification | `both signature halves verify across 5,841 records in 25 checkpoints` |
 | Forged copy, signatures stripped, hashes recomputed | chain `OK`, signatures `FAILED` |
 | Cycle runtime | 0.354 s unsigned, 0.716 s hybrid |
-| Tests | 30 passed |
+| Tests | 37 passed |
 
 ```bash
 pip install -r requirements-pqc.txt
@@ -115,7 +115,7 @@ record for the life of the process.
 | Chain verification | `chain intact across 5,867 records` |
 | Tamper test | edited record 2, `HIGH` to `LOW`; verifier `BROKEN at seq 2` |
 | Live ledger after tamper test | still intact (the test runs on a copy) |
-| Tests | 13 without the extra, 25 with it |
+| Tests | 24 without the extra, 37 with it |
 | Cycle runtime | 0.354 s for 5,000 assessments, 0.716 s hybrid |
 
 Numbers above are from an actual run on this machine, not estimates. Regenerate them with
