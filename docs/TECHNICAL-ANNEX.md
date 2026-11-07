@@ -237,7 +237,7 @@ approval step, which is why the actor is a field in the record rather than a ses
 
 ## 9. Tests and CI
 
-37 tests, 24 core and 13 hybrid. The core tests are `unittest` (no third-party dependency),
+39 tests, 24 core and 15 hybrid. The core tests are `unittest` (no third-party dependency),
 the hybrid tests are `pytest`. CI runs two jobs on Python 3.12: a stdlib job that seals, verifies
 and tampers, and a hybrid job that installs the pinned extra and repeats seal, verify, tamper,
 forge and the signing benchmark.
@@ -272,7 +272,7 @@ forge and the signing benchmark.
 | Hybrid verification | both halves verify across 5,841 records in 25 checkpoints |
 | Tamper test | edit record 2, `BROKEN at seq 2`, live ledger intact |
 | Forgery | chain `OK`, signatures `FAILED at seq 0` |
-| Tests | 37 passed |
+| Tests | 39 passed |
 
 Regenerate every line with the commands below. Nothing in this table is an estimate.
 

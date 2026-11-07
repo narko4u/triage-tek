@@ -309,10 +309,13 @@ def verify_ledger(records, expected_fingerprint=None, require_hybrid=True):
         out["first_bad_seq"] = 0 if records else None
         out["detail"] = "no ML-DSA checkpoint covers the ledger"
         return out
-    total = 1 + max([r.get("seq", -1) for r in records if r.get("kind") != KIND_CHECKPOINT], default=-1)
-    out["unsealed_tail"] = max(0, total - (covers_to + 1))
+    uncovered = [
+        r for r in records
+        if r.get("seq", -1) > covers_to and r.get("kind") != KIND_CHECKPOINT
+    ]
+    out["unsealed_tail"] = len(uncovered)
     if out["unsealed_tail"]:
-        out["first_bad_seq"] = covers_to + 1
+        out["first_bad_seq"] = uncovered[0].get("seq")
         out["detail"] = "%d records are not yet covered by an ML-DSA checkpoint" % out["unsealed_tail"]
         return out
     out["ok"] = True

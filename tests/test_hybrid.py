@@ -190,3 +190,26 @@ def test_engine_refuses_a_forged_signature(tmp_path):
     with pytest.raises(LedgerIntegrityError) as exc:
         Engine(str(tmp_path), signer=signer)
     assert "signatures do not verify" in str(exc.value)
+
+
+def test_ed25519_alone_does_not_satisfy_the_hybrid_claim(tmp_path):
+    """The classical half on its own must be refused, or "both halves" means nothing."""
+    led, _ = make_ledger(tmp_path)
+    records = led.all()
+    checkpoint = [r for r in records if r.get("kind") == pqc.KIND_CHECKPOINT][0]
+    checkpoint.pop("mldsa_sig", None)
+    rewrite(led.path, rehash(records))
+    res = Ledger(led.path).verify_signatures()
+    assert not res["ok"]
+    assert res["first_bad_seq"] == checkpoint["seq"]
+    assert "ml-dsa" in res["detail"].lower()
+
+
+def test_record_appended_after_the_last_checkpoint_is_refused(tmp_path):
+    """A signed record with no ML-DSA root above it is an unsealed tail, not evidence."""
+    led, _ = make_ledger(tmp_path)
+    led.append(subject="SUBJ-99", decision="ASSESSED", tier="LOW")
+    res = Ledger(led.path).verify_signatures()
+    assert not res["ok"]
+    assert res["unsealed_tail"] == 1
+    assert "not yet covered" in res["detail"]

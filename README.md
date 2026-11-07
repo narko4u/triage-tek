@@ -5,6 +5,7 @@
 **Screening evidence infrastructure for population health programmes.**
 
 Live demo: **https://triage-tek.empirelabs.com.au** (synthetic data, resets every 30 minutes).
+Video walkthrough, 97 s: **https://youtu.be/suoF86ZiNUI**
 
 TriageTek is a working prototype for the **Future Health Digital Innovation Challenge** (Challenge 04,
 Precision Prevention and Screening), GITEX Dubai 2026.
@@ -39,7 +40,7 @@ verifying after the classical algorithms are retired.
 | Hybrid verification | `both signature halves verify across 5,841 records in 25 checkpoints` |
 | Forged copy, signatures stripped, hashes recomputed | chain `OK`, signatures `FAILED` |
 | Cycle runtime | 0.354 s unsigned, 0.716 s hybrid |
-| Tests | 37 passed |
+| Tests | 39 passed |
 
 ```bash
 pip install -r requirements-pqc.txt
@@ -65,7 +66,7 @@ No dependencies for the default profile, no network calls, no accounts. Python 3
 The hybrid profile adds one optional extra, listed in `requirements-pqc.txt`.
 
 ```bash
-python3 -m pytest tests -q                    # 37 tests with the extra, 24 without
+python3 -m pytest tests -q                    # 39 tests with the extra, 24 without
 python3 -m sel.verify --ledger data/ledger.jsonl --chain-only   # default profile is unsigned
 python3 -m sel.tamper --ledger data/ledger.jsonl --out data/tampered.jsonl --field tier
 python3 -m sel.verify --ledger data/tampered.jsonl --chain-only # exits 1, names the bad record
@@ -117,7 +118,7 @@ record for the life of the process.
 | Chain verification | `chain intact across 5,867 records` |
 | Tamper test | edited record 2, `HIGH` to `LOW`; verifier `BROKEN at seq 2` |
 | Live ledger after tamper test | still intact (the test runs on a copy) |
-| Tests | 24 without the extra, 37 with it |
+| Tests | 24 without the extra, 39 with it |
 | Cycle runtime | 0.354 s for 5,000 assessments, 0.716 s hybrid |
 
 Numbers above are from an actual run on this machine, not estimates. Regenerate them with
@@ -148,7 +149,7 @@ sel/
   sel/tamper.py      tamper harness (works on a copy)
   server.py          stdlib HTTP server, no dependencies
   web/index.html     demo interface
-  tests/             37 tests, 13 of them for the hybrid profile
+  tests/             39 tests, 15 of them for the hybrid profile
   data/              generated cohort and ledger
   docs/              architecture, limits, demo script, rubric map
 ```

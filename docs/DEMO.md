@@ -2,6 +2,8 @@
 
 Run: `python3 server.py --port 8795`, open `http://127.0.0.1:8795`.
 
+Narrated walkthrough of this script, 97 s: https://youtu.be/suoF86ZiNUI
+
 ## 0:00 - the claim (20 s)
 
 "Every screening programme can tell you who it flagged. Almost none can prove, six months

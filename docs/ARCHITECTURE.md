@@ -118,7 +118,7 @@ that does not follow this graph.
 | `server.py` | stdlib HTTP API and static host | 271 |
 | `web/index.html` | demo interface | 237 |
 | `tests/test_core.py` | 24 core unit tests | 275 |
-| `tests/test_hybrid.py` | 13 hybrid profile tests | 187 |
+| `tests/test_hybrid.py` | 15 hybrid profile tests | 215 |
 
 ## Verification
 
