@@ -6,13 +6,18 @@ Run with the post-quantum extra installed:
     python3 -m pytest tests/test_hybrid.py -v
 """
 import base64
+import importlib.util
 import json
 import os
 import stat
+import unittest
 
 import pytest
 
-pytest.importorskip("pqcrypto", reason="the hybrid profile needs the pqcrypto extra")
+if importlib.util.find_spec("pqcrypto") is None:
+    # Skip cleanly under both runners: pytest.importorskip raises a pytest-only
+    # exception that unittest reports as a load error rather than a skip.
+    raise unittest.SkipTest("the hybrid profile needs the pqcrypto extra")
 
 from sel import pqc
 from sel.canonical import digest
